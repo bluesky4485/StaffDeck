@@ -9,7 +9,7 @@ export default function ToolsPage() {
   const [rows, setRows] = useState<ToolRead[]>([]);
   const [selected, setSelected] = useState<ToolRead | null>(null);
   const [form] = Form.useForm();
-  const [testJson, setTestJson] = useState('{\n  "order_id": "A123456"\n}');
+  const [testJson, setTestJson] = useState('{}');
   const [testResult, setTestResult] = useState('');
 
   const load = () =>
@@ -32,6 +32,7 @@ export default function ToolsPage() {
       output_schema: JSON.stringify(row.output_schema, null, 2),
       allowed_skills: row.allowed_skills.join(','),
     });
+    setTestJson(JSON.stringify(exampleFromSchema(row.input_schema), null, 2));
   }
 
   async function save() {
@@ -66,9 +67,10 @@ export default function ToolsPage() {
       message.warning('请先选择工具');
       return;
     }
+    const argumentsJson = row.id === selected?.id ? parseJson(testJson, {}) : exampleFromSchema(row.input_schema);
     const result = await api.post(`/api/enterprise/tools/${row.id}/test`, {
       tenant_id: TENANT_ID,
-      arguments: parseJson(testJson, {}),
+      arguments: argumentsJson,
     });
     setTestResult(JSON.stringify(result, null, 2));
   }
@@ -140,4 +142,25 @@ export default function ToolsPage() {
 function parseJson<T>(value: string, fallback: T): T {
   if (!value) return fallback;
   return JSON.parse(value) as T;
+}
+
+function exampleFromSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const properties = schema.properties && typeof schema.properties === 'object'
+    ? schema.properties as Record<string, Record<string, unknown>>
+    : {};
+  return Object.fromEntries(
+    Object.entries(properties).map(([key, value]) => [key, exampleValue(key, value)]),
+  );
+}
+
+function exampleValue(key: string, schema: Record<string, unknown>): unknown {
+  if (schema.default !== undefined) return schema.default;
+  if (schema.example !== undefined) return schema.example;
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) return schema.enum[0];
+  if (schema.type === 'integer') return 1;
+  if (schema.type === 'number') return 1;
+  if (schema.type === 'boolean') return true;
+  if (schema.type === 'array') return [];
+  if (schema.type === 'object') return {};
+  return `sample_${key}`;
 }

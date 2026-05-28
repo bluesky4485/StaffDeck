@@ -10,6 +10,27 @@ from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/mock", tags=["mock"])
 
+PRODUCT_CATALOG = {
+    "SKU-001": Decimal("99.00"),
+    "SKU-002": Decimal("199.00"),
+    "SKU-003": Decimal("299.00"),
+}
+
+PRIMARY_ORDER_CENTER = {
+    "ORDER-1001": {"status": "signed", "signed_days": 3, "refundable": True},
+    "ORDER-1002": {"status": "signed", "signed_days": 16, "refundable": False},
+}
+
+ARCHIVE_ORDER_CENTER = {
+    "ARCHIVE-1001": {
+        "status": "signed",
+        "signed_days": 4,
+        "refundable": True,
+        "archive_reason": "订单已归档到历史订单中心",
+        "recommendation": "该历史订单签收 4 天，当前可继续发起售后退款审核。",
+    }
+}
+
 
 class MockOrderQueryRequest(BaseModel):
     order_id: str
@@ -34,38 +55,20 @@ class MockOrderAddRequest(BaseModel):
 
 @router.post("/order/query")
 def mock_order_query(request: MockOrderQueryRequest) -> dict[str, Any]:
-    if request.order_id.upper().startswith("HIS"):
-        return {
-            "order_id": request.order_id,
-            "found": False,
-            "source": "primary_order_center",
-            "results": [],
-            "miss_reason": "primary_order_center_miss",
-            "hint": "主订单中心未命中，可尝试历史订单查询。",
-        }
-    signed_days = 3 if request.order_id == "A123456" else 16
-    return {
-        "order_id": request.order_id,
-        "found": True,
-        "source": "primary_order_center",
-        "status": "signed",
-        "signed_days": signed_days,
-        "refundable": signed_days <= 7,
-    }
+    order_id = _normalize_id(request.order_id)
+    record = PRIMARY_ORDER_CENTER.get(order_id)
+    if not record:
+        return _order_miss(order_id, "primary_order_center")
+    return _order_hit(order_id, "primary_order_center", record)
 
 
 @router.post("/order/archive-query")
 def mock_order_archive_query(request: MockOrderQueryRequest) -> dict[str, Any]:
-    return {
-        "order_id": request.order_id,
-        "found": True,
-        "source": "archive_order_center",
-        "status": "signed",
-        "signed_days": 4,
-        "refundable": True,
-        "archive_reason": "订单已归档到历史订单中心",
-        "recommendation": "该历史订单签收 4 天，当前可继续发起售后退款审核。",
-    }
+    order_id = _normalize_id(request.order_id)
+    record = ARCHIVE_ORDER_CENTER.get(order_id)
+    if not record:
+        return _order_miss(order_id, "archive_order_center")
+    return _order_hit(order_id, "archive_order_center", record)
 
 
 @router.post("/product/purchase")
@@ -109,12 +112,31 @@ def mock_order_add(request: MockOrderAddRequest) -> dict[str, Any]:
 
 
 def _mock_price(product_id: str) -> Decimal:
-    catalog = {
-        "SKU-001": Decimal("99.00"),
-        "SKU-002": Decimal("199.00"),
-        "SKU-003": Decimal("299.00"),
+    return PRODUCT_CATALOG.get(_normalize_id(product_id), Decimal("129.00"))
+
+
+def _normalize_id(value: str) -> str:
+    return value.strip().upper()
+
+
+def _order_hit(order_id: str, source: str, record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "order_id": order_id,
+        "found": True,
+        "source": source,
+        **record,
     }
-    return catalog.get(product_id, Decimal("129.00"))
+
+
+def _order_miss(order_id: str, source: str) -> dict[str, Any]:
+    return {
+        "order_id": order_id,
+        "found": False,
+        "source": source,
+        "results": [],
+        "miss_reason": "source_miss",
+        "hint": "当前订单中心未命中，可尝试其他已配置的订单查询工具。",
+    }
 
 
 def _now_iso() -> str:

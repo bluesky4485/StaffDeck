@@ -2,7 +2,7 @@ from app.core.agent_loop import AgentLoop
 from app.core.skill_runtime import SkillRuntime
 from app.db.models import ChatSession, Skill, Tool
 from app.session.session_schema import StepAgentResult
-from app.tools.tool_schema import ToolResult
+from app.tools.tool_schema import ToolCall, ToolResult
 
 
 class FakeEvents:
@@ -112,28 +112,6 @@ def test_model_can_complete_non_terminal_skill_when_no_next_action() -> None:
         StepAgentResult(reply="好的，已取消本次报修流程。", is_step_completed=True),
         None,
     )
-
-
-def test_pending_reply_uses_skill_tool_when_arguments_are_ready() -> None:
-    loop = object.__new__(AgentLoop)
-    session = ChatSession(
-        id="session_test",
-        tenant_id="tenant_demo",
-        active_skill_id="refund",
-        active_step_id="check_refund",
-        slots_json={"order_id": "A12345", "refund_reason": "商品质量"},
-    )
-
-    tool_call = loop._tool_call_for_pending_reply(
-        session,
-        _refund_skill(),
-        StepAgentResult(reply="正在为您核实订单 A12345 的售后处理方案，请稍候。"),
-        [_refund_tool()],
-    )
-
-    assert tool_call is not None
-    assert tool_call.name == "order.query"
-    assert tool_call.arguments == {"order_id": "A12345", "refund_reason": "商品质量"}
 
 
 def test_successful_tool_call_advances_to_final_reply_step() -> None:
@@ -302,18 +280,7 @@ def _refund_skill_with_late_collect_step() -> Skill:
 
 
 def _refund_tool_call():
-    tool_call = AgentLoop._tool_call_for_pending_reply(
-        object.__new__(AgentLoop),
-        ChatSession(
-            id="session_test",
-            tenant_id="tenant_demo",
-            active_skill_id="refund",
-            active_step_id="check_refund",
-            slots_json={"order_id": "A12345", "refund_reason": "商品质量"},
-        ),
-        _refund_skill(),
-        StepAgentResult(reply="正在为您核实订单 A12345 的售后处理方案，请稍候。"),
-        [_refund_tool()],
+    return ToolCall(
+        name="order.query",
+        arguments={"order_id": "A12345", "refund_reason": "商品质量"},
     )
-    assert tool_call is not None
-    return tool_call

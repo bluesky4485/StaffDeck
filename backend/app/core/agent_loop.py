@@ -26,18 +26,6 @@ StatusCallback = Callable[[str, dict[str, object]], None]
 STREAM_CHUNK_INTERVAL_SECONDS = 0.045
 DEFAULT_REFLECTION_MAX_ROUNDS = 1
 REFLECTION_MAX_ROUNDS_LIMIT = 5
-PENDING_REPLY_MARKERS = (
-    "请稍候",
-    "请稍等",
-    "稍后",
-    "正在为您",
-    "正在处理",
-    "正在查询",
-    "正在核实",
-    "正在创建",
-    "正在生成",
-    "处理中",
-)
 
 
 class AgentLoopPreconditionError(Exception):
@@ -272,18 +260,6 @@ class AgentLoop:
                 self.db.refresh(chat_session)
 
             reflection_stream_events: list[tuple[str, dict[str, object]]] = []
-            step_result, tool_result = self._close_pending_tool_loop(
-                request,
-                chat_session,
-                active_skill,
-                tools,
-                step_result,
-                tool_result,
-                reflection_stream_events,
-            )
-            for event_name, payload in reflection_stream_events:
-                yield self._stream_event(event_name, chat_session, payload)
-            reflection_stream_events = []
             reflection_max_rounds = self._get_reflection_max_rounds(request.tenant_id)
             if reflection_max_rounds > 0 and self._should_try_reflection(router_decision, step_result, tool_result):
                 yield self._stream_status(
@@ -543,14 +519,6 @@ class AgentLoop:
             self.db.commit()
             self.db.refresh(chat_session)
 
-        step_result, tool_result = self._close_pending_tool_loop(
-            request,
-            chat_session,
-            active_skill,
-            tools,
-            step_result,
-            tool_result,
-        )
         (
             active_skill,
             router_decision,
@@ -945,126 +913,6 @@ class AgentLoop:
         self.db.commit()
         self.db.refresh(chat_session)
         return tool_result
-
-    def _close_pending_tool_loop(
-        self,
-        request: ChatTurnRequest,
-        chat_session: ChatSession,
-        active_skill: Skill | None,
-        tools: list[Tool],
-        step_result: StepAgentResult,
-        tool_result: ToolResult | None,
-        stream_events: list[tuple[str, dict[str, object]]] | None = None,
-    ) -> tuple[StepAgentResult, ToolResult | None]:
-        if tool_result is not None or step_result.tool_call:
-            return step_result, tool_result
-
-        tool_call = self._tool_call_for_pending_reply(chat_session, active_skill, step_result, tools)
-        if not tool_call:
-            return step_result, tool_result
-
-        retry_step_result = step_result.model_copy(
-            update={"reply": None, "tool_call": tool_call, "is_step_completed": True}
-        )
-        self.events.record(
-            request.tenant_id,
-            chat_session.id,
-            "pending_reply_tool_call_synthesized",
-            {
-                "tool_name": tool_call.name,
-                "reason": "step_agent_returned_pending_reply_with_satisfied_tool_args",
-            },
-        )
-        if stream_events is not None:
-            stream_events.append(
-                (
-                    "status",
-                    {"phase": "tool", "text": f"正在调用工具 {tool_call.name}", "tool_name": tool_call.name},
-                )
-            )
-
-        retry_tool_result = self._execute_tool_call(request, chat_session, tool_call)
-        self._advance_after_successful_tool(
-            request.tenant_id, chat_session, active_skill, retry_step_result, retry_tool_result
-        )
-        self.db.commit()
-        self.db.refresh(chat_session)
-        if stream_events is not None:
-            stream_events.append(
-                (
-                    "tool_result",
-                    self._tool_activity_payload(request.tenant_id, tool_call.name, retry_tool_result),
-                )
-            )
-        return retry_step_result, retry_tool_result
-
-    def _tool_call_for_pending_reply(
-        self,
-        chat_session: ChatSession,
-        active_skill: Skill | None,
-        step_result: StepAgentResult,
-        tools: list[Tool],
-    ) -> ToolCall | None:
-        if not active_skill or not self._looks_like_pending_reply(step_result.reply):
-            return None
-
-        candidate_names = self._candidate_tool_names_for_skill_state(active_skill, chat_session, tools)
-        if not candidate_names:
-            return None
-
-        active_skill_id = chat_session.active_skill_id
-        for tool_name in candidate_names:
-            tool = next((item for item in tools if item.enabled and item.name == tool_name), None)
-            if not tool:
-                continue
-            if active_skill_id and tool.allowed_skills_json and active_skill_id not in tool.allowed_skills_json:
-                continue
-            arguments = self._build_tool_arguments_from_slots(tool, chat_session.slots_json or {})
-            required = [str(field) for field in (tool.input_schema or {}).get("required", [])]
-            if any(not self._slot_has_value(arguments, field) for field in required):
-                continue
-            return ToolCall(name=tool.name, arguments=arguments)
-        return None
-
-    def _candidate_tool_names_for_skill_state(
-        self, active_skill: Skill, chat_session: ChatSession, tools: list[Tool]
-    ) -> list[str]:
-        content = active_skill.content_json or {}
-        steps = [step for step in content.get("steps", []) if isinstance(step, dict)]
-        current_step = next(
-            (step for step in steps if step.get("step_id") == chat_session.active_step_id),
-            None,
-        )
-        names: list[str] = []
-        for step in ([current_step] if current_step else []) + steps:
-            if not step:
-                continue
-            for action in step.get("allowed_actions", []):
-                value = str(action)
-                if value.startswith("call_tool:"):
-                    name = value.split(":", 1)[1]
-                    if name and name not in names:
-                        names.append(name)
-
-        if names:
-            return names
-
-        active_skill_id = chat_session.active_skill_id
-        for tool in tools:
-            if (
-                tool.enabled
-                and active_skill_id
-                and tool.allowed_skills_json
-                and active_skill_id in tool.allowed_skills_json
-                and tool.name not in names
-            ):
-                names.append(tool.name)
-        return names
-
-    def _looks_like_pending_reply(self, text: str | None) -> bool:
-        if not text:
-            return False
-        return any(marker in text for marker in PENDING_REPLY_MARKERS)
 
     def _advance_after_successful_tool(
         self,

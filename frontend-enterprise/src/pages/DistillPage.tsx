@@ -4,11 +4,6 @@ import { useEffect, useRef, useState } from 'react';
 import { api, streamPost, TENANT_ID } from '../api/client';
 import type { SkillCard } from '../types';
 
-const sampleCase = {
-  title: '购买商品',
-  raw_content: '获取用户姓名，查询商品是否存在，生成对应订单号，反馈给用户',
-};
-
 type SkillCardEditor = Omit<SkillCard, 'skill_id'> & { skill_id: string };
 
 function toSkillEditor(content: SkillCard): SkillCardEditor {
@@ -117,12 +112,12 @@ export default function DistillPage() {
       </div>
       <div className="grid-2">
         <Card>
-          <Form form={form} layout="vertical" initialValues={sampleCase}>
+          <Form form={form} layout="vertical">
             <Form.Item label="文档标题" name="title" rules={[{ required: true }]}>
-              <Input />
+              <Input placeholder="输入技能名称" />
             </Form.Item>
             <Form.Item label="原始技能文本" name="raw_content" rules={[{ required: true }]}>
-              <Input.TextArea rows={18} />
+              <Input.TextArea rows={18} placeholder="粘贴业务流程、客服话术或操作规范" />
             </Form.Item>
             <Space>
               <Button type="primary" icon={<ThunderboltOutlined />} loading={loading} onClick={distill}>生成</Button>

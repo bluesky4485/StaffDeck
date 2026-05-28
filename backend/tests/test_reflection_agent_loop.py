@@ -58,7 +58,7 @@ def test_reflection_builds_archive_order_tool_call_from_order_slot() -> None:
         id="session_test",
         tenant_id="tenant_demo",
         active_skill_id="after_sales_refund",
-        slots_json={"order_id": "HIS20240527001"},
+        slots_json={"order_id": "ARCHIVE-1001"},
     )
 
     tool_call = loop._tool_call_from_reflection(
@@ -69,7 +69,7 @@ def test_reflection_builds_archive_order_tool_call_from_order_slot() -> None:
 
     assert tool_call is not None
     assert tool_call.name == "order.archive_query"
-    assert tool_call.arguments == {"order_id": "HIS20240527001"}
+    assert tool_call.arguments == {"order_id": "ARCHIVE-1001"}
 
 
 def test_reflection_tool_retry_is_preferred_for_current_skill_target() -> None:
@@ -122,7 +122,7 @@ def test_reflection_tool_retry_preserves_router_decision_and_streams_tool_events
         session,
         None,
         decision,
-        ToolCall(name="order.archive_query", arguments={"order_id": "HIS20240527001"}),
+        ToolCall(name="order.archive_query", arguments={"order_id": "ARCHIVE-1001"}),
         "主工具未命中，尝试历史订单查询",
         stream_events,
     )

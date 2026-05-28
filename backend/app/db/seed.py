@@ -8,9 +8,6 @@ from app.security.encryption import encrypt_secret
 from app.security.auth import hash_password
 
 
-LEGACY_REFLECTION_SKILL_IDS = {"reflection_lookup_test"}
-LEGACY_REFLECTION_TOOL_NAMES = {"reflection.primary_search", "reflection.backup_search"}
-
 REFUND_SKILL = {
     "skill_id": "after_sales_refund",
     "name": "售后退款流程",
@@ -257,8 +254,6 @@ def seed_demo_data(session: Session) -> None:
             )
         )
 
-    _delete_legacy_reflection_demo(session)
-
     for content in (REFUND_SKILL, EXCHANGE_SKILL):
         existing = session.exec(
             select(Skill).where(
@@ -306,18 +301,3 @@ def seed_demo_data(session: Session) -> None:
         )
 
     session.commit()
-
-
-def _delete_legacy_reflection_demo(session: Session) -> None:
-    for skill_id in LEGACY_REFLECTION_SKILL_IDS:
-        row = session.exec(
-            select(Skill).where(Skill.tenant_id == "tenant_demo", Skill.skill_id == skill_id)
-        ).first()
-        if row:
-            session.delete(row)
-    for tool_name in LEGACY_REFLECTION_TOOL_NAMES:
-        row = session.exec(
-            select(Tool).where(Tool.tenant_id == "tenant_demo", Tool.name == tool_name)
-        ).first()
-        if row:
-            session.delete(row)
