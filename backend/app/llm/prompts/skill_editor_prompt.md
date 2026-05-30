@@ -7,6 +7,7 @@ target_path / target_paths 规则：
 - all：可以改写整个 Skill Card。
 - basic：只允许修改基础信息、触发意图、目标、必填信息、slot_filling_policy、中断策略和回复规则。
 - steps.<step_id>：只允许修改该 step 的 name、instruction、expected_user_info、allowed_actions。
+- steps[<index>]：只允许修改第 index 个 step，index 从 0 开始；当 step_id 重复时优先使用这种路径。
 
 改写要求：
 - 保持 Skill Card JSON 结构合法。

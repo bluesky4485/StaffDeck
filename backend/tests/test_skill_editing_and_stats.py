@@ -62,6 +62,33 @@ def test_skill_editor_merges_multiple_selected_targets() -> None:
     assert response.draft_skill.steps[1].instruction == current.steps[1].instruction
 
 
+def test_skill_editor_can_target_duplicate_step_ids_by_index() -> None:
+    current = _skill_card()
+    current.steps[1].step_id = "collect_info"
+    candidate = _skill_card()
+    candidate.steps[0].instruction = "不应修改第一步"
+    candidate.steps[1].step_id = "collect_info"
+    candidate.steps[1].instruction = "只修改第二个重复 step"
+
+    response = SkillEditor()._normalize_response(  # noqa: SLF001
+        {
+            "assistant_message": "已改写指定下标步骤。",
+            "draft_skill": candidate.model_dump(),
+        },
+        SkillRewriteRequest(
+            tenant_id="tenant_demo",
+            current_skill=current,
+            instruction="只改第二个重复步骤",
+            target_path="steps[1]",
+            target_paths=["steps[1]"],
+            target_label="步骤 2",
+        ),
+    )
+
+    assert response.draft_skill.steps[0].instruction == current.steps[0].instruction
+    assert response.draft_skill.steps[1].instruction == "只修改第二个重复 step"
+
+
 def test_skill_stats_counts_skill_entry_and_feedback() -> None:
     with _test_session() as db:
         db.add(

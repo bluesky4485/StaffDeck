@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 from time import sleep
 from typing import Any, Iterator
 
@@ -122,31 +123,51 @@ def _merge_target(current: SkillCard, candidate: SkillCard, target_path: str) ->
                 current_data[field] = candidate_data[field]
         return SkillCard.model_validate(current_data)
 
-    if normalized_path.startswith("steps."):
-        step_id = normalized_path.split(".", 1)[1]
-        current_steps = [step for step in current_data.get("steps", []) if isinstance(step, dict)]
+    target_index = _step_target_index(current_data, normalized_path)
+    if target_index is not None:
         candidate_steps = [step for step in candidate_data.get("steps", []) if isinstance(step, dict)]
-        target_index = next(
-            (index for index, step in enumerate(current_steps) if step.get("step_id") == step_id),
-            -1,
-        )
-        if target_index < 0:
-            return current
-        replacement = next(
-            (step for step in candidate_steps if step.get("step_id") == step_id),
-            candidate_steps[target_index] if target_index < len(candidate_steps) else None,
-        )
-        if not isinstance(replacement, dict):
-            return current
-        next_step = dict(current_steps[target_index])
-        for field in STEP_FIELDS:
-            if field in replacement:
-                next_step[field] = replacement[field]
-        current_steps[target_index] = next_step
-        current_data["steps"] = current_steps
-        return SkillCard.model_validate(current_data)
+        current_steps = [step for step in current_data.get("steps", []) if isinstance(step, dict)]
+        replacement = _replacement_step(candidate_steps, current_steps[target_index], target_index)
+        if isinstance(replacement, dict):
+            next_step = dict(current_steps[target_index])
+            for field in STEP_FIELDS:
+                if field in replacement:
+                    next_step[field] = replacement[field]
+            current_steps[target_index] = next_step
+            current_data["steps"] = current_steps
+            return SkillCard.model_validate(current_data)
 
     return current
+
+
+def _step_target_index(current_data: dict[str, Any], path: str) -> int | None:
+    current_steps = [step for step in current_data.get("steps", []) if isinstance(step, dict)]
+    bracket_match = re.fullmatch(r"steps\[(\d+)\]", path)
+    if bracket_match:
+        index = int(bracket_match.group(1))
+        return index if 0 <= index < len(current_steps) else None
+    if path.startswith("steps."):
+        step_id = path.split(".", 1)[1]
+        return next(
+            (index for index, step in enumerate(current_steps) if step.get("step_id") == step_id),
+            None,
+        )
+    return None
+
+
+def _replacement_step(
+    candidate_steps: list[dict[str, Any]],
+    current_step: dict[str, Any],
+    target_index: int,
+) -> dict[str, Any] | None:
+    step_id = str(current_step.get("step_id") or "")
+    if step_id:
+        matching_steps = [step for step in candidate_steps if str(step.get("step_id") or "") == step_id]
+        if len(matching_steps) == 1:
+            return matching_steps[0]
+    if target_index < len(candidate_steps):
+        return candidate_steps[target_index]
+    return None
 
 
 def _extract_json(text: str) -> str:

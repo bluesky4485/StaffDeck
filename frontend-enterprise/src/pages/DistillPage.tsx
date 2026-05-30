@@ -366,7 +366,7 @@ function SkillSource({
       <div className="skill-source-steps">
         {skill.steps.map((step, index) => {
           const stepId = String(step.step_id || `step_${index + 1}`);
-          const path = `steps.${stepId}`;
+          const path = stepTargetPath(index);
           return (
             <button
               type="button"
@@ -413,7 +413,7 @@ function SkillFlow({
       </button>
       {skill.steps.map((step, index) => {
         const stepId = String(step.step_id || `step_${index + 1}`);
-        const path = `steps.${stepId}`;
+        const path = stepTargetPath(index);
         const toolActions = asStringList(step.allowed_actions).filter((action) =>
           String(action).startsWith('call_tool:'),
         );
@@ -501,7 +501,7 @@ function asStringList(value: unknown): string[] {
 function allTargetPaths(skill: SkillCard): string[] {
   return [
     'basic',
-    ...skill.steps.map((step, index) => `steps.${String(step.step_id || `step_${index + 1}`)}`),
+    ...skill.steps.map((_step, index) => stepTargetPath(index)),
   ];
 }
 
@@ -514,13 +514,22 @@ function reconcileSelectedPaths(paths: string[], skill: SkillCard): string[] {
 function targetLabel(paths: string[], skill: SkillCard): string {
   const labels = paths.map((path) => {
     if (path === 'basic') return '基础信息';
-    if (path.startsWith('steps.')) {
-      const stepId = path.split('.', 2)[1];
-      const index = skill.steps.findIndex((step) => String(step.step_id || '') === stepId);
+    const stepIndex = stepIndexFromPath(path);
+    if (stepIndex !== null) {
+      const index = stepIndex;
       const step = index >= 0 ? skill.steps[index] : null;
-      return step ? `步骤 ${index + 1}：${step.name || stepId}` : path;
+      return step ? `步骤 ${index + 1}：${step.name || step.step_id || path}` : path;
     }
     return path;
   });
   return labels.join('、');
+}
+
+function stepTargetPath(index: number): string {
+  return `steps[${index}]`;
+}
+
+function stepIndexFromPath(path: string): number | null {
+  const match = path.match(/^steps\[(\d+)\]$/);
+  return match ? Number(match[1]) : null;
 }
