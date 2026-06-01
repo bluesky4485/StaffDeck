@@ -381,6 +381,7 @@ def _upsert_skill_feedback_for_message(
         return
     skill_id = skill_context["skill_id"]
     skill_version = skill_context.get("skill_version")
+    step_id = skill_context.get("step_id")
     existing = db.exec(
         select(SkillFeedback).where(
             SkillFeedback.tenant_id == tenant_id,
@@ -391,6 +392,7 @@ def _upsert_skill_feedback_for_message(
     if existing:
         existing.skill_id = skill_id
         existing.skill_version = skill_version
+        existing.step_id = step_id
         existing.rating = rating
         existing.updated_at = now
         db.add(existing)
@@ -400,6 +402,7 @@ def _upsert_skill_feedback_for_message(
             tenant_id=tenant_id,
             skill_id=skill_id,
             skill_version=skill_version,
+            step_id=step_id,
             session_id=message_row.session_id,
             message_id=message_row.id,
             user_id=user_id,
@@ -485,17 +488,26 @@ def _skill_context_from_event(event: AgentEvent) -> dict[str, str | None] | None
         if not skill_id:
             return None
         skill_version = str(payload.get("to_skill_version") or payload.get("from_skill_version") or "") or None
-        return {"skill_id": skill_id, "skill_version": skill_version}
+        step_id = str(payload.get("to_step_id") or payload.get("from_step_id") or "") or None
+        return {"skill_id": skill_id, "skill_version": skill_version, "step_id": step_id}
     if event.event_type == "skill_completed":
         skill_id = str(payload.get("skill_id") or "") or None
         if not skill_id:
             return None
-        return {"skill_id": skill_id, "skill_version": str(payload.get("skill_version") or "") or None}
+        return {
+            "skill_id": skill_id,
+            "skill_version": str(payload.get("skill_version") or "") or None,
+            "step_id": str(payload.get("step_id") or "") or None,
+        }
     if event.event_type == "reflection_decision_created":
         skill_id = str(payload.get("target_skill_id") or "") or None
         if not skill_id:
             return None
-        return {"skill_id": skill_id, "skill_version": str(payload.get("target_skill_version") or "") or None}
+        return {
+            "skill_id": skill_id,
+            "skill_version": str(payload.get("target_skill_version") or "") or None,
+            "step_id": str(payload.get("target_step_id") or "") or None,
+        }
     return None
 
 

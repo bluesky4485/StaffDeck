@@ -4,7 +4,7 @@ from zipfile import ZipFile
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from app.api.chat import _active_skill_for_assistant_message
+from app.api.chat import _active_skill_context_for_assistant_message, _active_skill_for_assistant_message
 from app.api.skills import (
     _extract_uploaded_skill_file,
     _skill_stats,
@@ -150,6 +150,14 @@ def test_skill_stats_counts_skill_entry_and_feedback() -> None:
             )
         )
         db.add(
+            AgentEvent(
+                tenant_id="tenant_demo",
+                session_id="session_2",
+                event_type="skill_started",
+                payload_json={"to_skill_id": "purchase", "to_skill_version": "1.5.0"},
+            )
+        )
+        db.add(
             SkillFeedback(
                 tenant_id="tenant_demo",
                 skill_id="purchase",
@@ -175,13 +183,57 @@ def test_skill_stats_counts_skill_entry_and_feedback() -> None:
 
         stats = _skill_stats(db, "tenant_demo")
 
-    assert stats["purchase"]["call_count"] == 1
+    assert stats["purchase"]["call_count"] == 2
     assert stats["purchase"]["positive_feedback_count"] == 1
     assert stats["purchase"]["negative_feedback_count"] == 1
     assert stats["purchase"]["positive_rate"] == 0.5
     assert stats["purchase"]["negative_rate"] == 0.5
-    assert stats["purchase@1.5.0"]["call_count"] == 1
+    assert stats["purchase@1.5.0"]["call_count"] == 2
     assert stats["purchase@1.5.0"]["positive_feedback_count"] == 1
+    assert stats["purchase@1.5.0"]["negative_feedback_count"] == 1
+
+
+def test_skill_stats_count_one_negative_feedback_per_flow() -> None:
+    with _test_session() as db:
+        db.add(Tenant(id="tenant_demo", name="Demo"))
+        content = _skill_card()
+        db.add(
+            Skill(
+                tenant_id="tenant_demo",
+                skill_id="purchase",
+                version="1.5.0",
+                name="购买商品",
+                content_json=content.model_dump(),
+                status="published",
+            )
+        )
+        db.add(
+            AgentEvent(
+                tenant_id="tenant_demo",
+                session_id="session_1",
+                event_type="skill_started",
+                payload_json={"to_skill_id": "purchase", "to_skill_version": "1.5.0"},
+            )
+        )
+        for message_id in ["msg_1", "msg_2"]:
+            db.add(
+                SkillFeedback(
+                    tenant_id="tenant_demo",
+                    skill_id="purchase",
+                    skill_version="1.5.0",
+                    session_id="session_1",
+                    message_id=message_id,
+                    user_id="user_1",
+                    rating="down",
+                )
+            )
+        db.commit()
+
+        stats = _skill_stats(db, "tenant_demo")
+
+    assert stats["purchase"]["call_count"] == 1
+    assert stats["purchase"]["negative_feedback_count"] == 1
+    assert stats["purchase"]["negative_rate"] == 1.0
     assert stats["purchase@1.5.0"]["negative_feedback_count"] == 1
 
 
@@ -506,8 +558,8 @@ def test_skill_read_includes_total_and_recent_version_ranking_stats() -> None:
     assert payload.recent_call_count == 3
     assert payload.recent_positive_feedback_count == 1
     assert payload.recent_negative_feedback_count == 1
-    assert payload.recent_positive_rate == 0.5
-    assert payload.recent_negative_rate == 0.5
+    assert payload.recent_positive_rate == 0.3333
+    assert payload.recent_negative_rate == 0.3333
 
 
 def test_message_feedback_attribution_uses_turn_active_skill() -> None:
@@ -534,7 +586,7 @@ def test_message_feedback_attribution_uses_turn_active_skill() -> None:
                 tenant_id="tenant_demo",
                 session_id="session_1",
                 event_type="skill_started",
-                payload_json={"to_skill_id": "refund"},
+                payload_json={"to_skill_id": "refund", "to_step_id": "collect_order"},
             )
         )
         db.add(
@@ -548,8 +600,10 @@ def test_message_feedback_attribution_uses_turn_active_skill() -> None:
         db.commit()
 
         skill_id = _active_skill_for_assistant_message(db, "tenant_demo", assistant)
+        context = _active_skill_context_for_assistant_message(db, "tenant_demo", assistant)
 
     assert skill_id == "refund"
+    assert context == {"skill_id": "refund", "skill_version": None, "step_id": "collect_order"}
 
 
 def test_skill_read_normalizes_duplicate_step_ids() -> None:

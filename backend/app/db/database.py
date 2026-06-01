@@ -78,6 +78,8 @@ def _migrate_sqlite_skill_schema() -> None:
             feedback_columns = {column["name"] for column in inspector.get_columns("skill_feedback")}
             if "skill_version" not in feedback_columns:
                 conn.execute(text("ALTER TABLE skill_feedback ADD COLUMN skill_version VARCHAR"))
+            if "step_id" not in feedback_columns:
+                conn.execute(text("ALTER TABLE skill_feedback ADD COLUMN step_id VARCHAR"))
 
         if legacy_table in tables and "skills" in tables:
             rows = conn.execute(text(f"SELECT * FROM {legacy_table}")).mappings().all()

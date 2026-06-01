@@ -492,23 +492,28 @@ def _skill_stats(db: Session, tenant_id: str) -> dict[str, dict[str, float | int
     feedback_rows = db.exec(
         select(SkillFeedback).where(SkillFeedback.tenant_id == tenant_id)
     ).all()
+    flow_feedback: dict[tuple[str, str | None, str, str], set[str]] = {}
     for feedback in feedback_rows:
         skill_version = feedback.skill_version or legacy_versions.get(feedback.skill_id)
-        entries = [stats.setdefault(feedback.skill_id, _empty_stats())]
+        flow_key = (feedback.skill_id, skill_version, feedback.session_id, feedback.user_id)
+        flow_feedback.setdefault(flow_key, set()).add(feedback.rating)
+
+    for (skill_id, skill_version, _session_id, _user_id), ratings in flow_feedback.items():
+        entries = [stats.setdefault(skill_id, _empty_stats())]
         if skill_version:
-            entries.append(stats.setdefault(_stats_key(feedback.skill_id, skill_version), _empty_stats()))
+            entries.append(stats.setdefault(_stats_key(skill_id, skill_version), _empty_stats()))
         for entry in entries:
-            if feedback.rating == "up":
-                entry["positive_feedback_count"] = int(entry["positive_feedback_count"]) + 1
-            elif feedback.rating == "down":
+            if "down" in ratings:
                 entry["negative_feedback_count"] = int(entry["negative_feedback_count"]) + 1
+            elif "up" in ratings:
+                entry["positive_feedback_count"] = int(entry["positive_feedback_count"]) + 1
 
     for entry in stats.values():
         positive = int(entry["positive_feedback_count"])
         negative = int(entry["negative_feedback_count"])
-        total = positive + negative
-        entry["positive_rate"] = round(positive / total, 4) if total else 0.0
-        entry["negative_rate"] = round(negative / total, 4) if total else 0.0
+        calls = int(entry["call_count"])
+        entry["positive_rate"] = round(positive / calls, 4) if calls else 0.0
+        entry["negative_rate"] = round(negative / calls, 4) if calls else 0.0
     return stats
 
 
@@ -565,9 +570,9 @@ def _recent_skill_stats(
             )
         positive = int(entry["positive_feedback_count"])
         negative = int(entry["negative_feedback_count"])
-        total = positive + negative
-        entry["positive_rate"] = round(positive / total, 4) if total else 0.0
-        entry["negative_rate"] = round(negative / total, 4) if total else 0.0
+        calls = int(entry["call_count"])
+        entry["positive_rate"] = round(positive / calls, 4) if calls else 0.0
+        entry["negative_rate"] = round(negative / calls, 4) if calls else 0.0
         recent_stats[skill_id] = entry
     return recent_stats
 

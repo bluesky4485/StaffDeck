@@ -204,6 +204,7 @@ class SkillFeedback(SQLModel, table=True):
     tenant_id: str = Field(index=True)
     skill_id: str = Field(index=True)
     skill_version: Optional[str] = Field(default=None, index=True)
+    step_id: Optional[str] = Field(default=None, index=True)
     session_id: str = Field(index=True)
     message_id: str = Field(index=True)
     user_id: str = Field(index=True)
