@@ -94,6 +94,18 @@ def update_tool(tool_id: str, request: ToolUpdateRequest, db: Session = Depends(
     return tool_read(row)
 
 
+@router.delete("/{tool_id}")
+def delete_tool(
+    tool_id: str,
+    tenant_id: str = Query(...),
+    db: Session = Depends(get_session),
+) -> dict[str, str]:
+    row = _get_tool(db, tenant_id, tool_id)
+    db.delete(row)
+    db.commit()
+    return {"status": "deleted"}
+
+
 @router.post("/{tool_id}/test", response_model=ToolResult)
 def test_tool(tool_id: str, request: ToolTestRequest, db: Session = Depends(get_session)) -> ToolResult:
     row = _get_tool(db, request.tenant_id, tool_id)
@@ -106,4 +118,3 @@ def _get_tool(db: Session, tenant_id: str, tool_id: str) -> Tool:
     if not row or row.tenant_id != tenant_id:
         raise HTTPException(status_code=404, detail="Tool not found")
     return row
-

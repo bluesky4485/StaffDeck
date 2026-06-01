@@ -1,5 +1,5 @@
-import { ExperimentOutlined, SaveOutlined, ToolOutlined } from '@ant-design/icons';
-import { Button, Card, Form, Input, Select, Space, Switch, Table, Typography, message } from 'antd';
+import { DeleteOutlined, ExperimentOutlined, SaveOutlined, ToolOutlined } from '@ant-design/icons';
+import { Button, Card, Form, Input, Modal, Select, Space, Switch, Table, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useEffect, useState } from 'react';
 import { api, TENANT_ID } from '../api/client';
@@ -81,6 +81,27 @@ export default function ToolsPage() {
     load();
   }
 
+  async function remove(row: ToolRead) {
+    Modal.confirm({
+      title: '删除工具？',
+      content: `确认删除「${row.display_name || row.name}」？删除后，引用该工具的技能将无法继续调用它。`,
+      okText: '删除',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        await api.delete(`/api/enterprise/tools/${row.id}?tenant_id=${TENANT_ID}`);
+        if (selected?.id === row.id) clearEditor();
+        if (testToolId === row.id) {
+          setTestToolId(undefined);
+          setTestJson('{}');
+          setTestResult('');
+        }
+        message.success('已删除');
+        load();
+      },
+    });
+  }
+
   function selectTestTool(toolId: string) {
     const row = rows.find((item) => item.id === toolId);
     setTestToolId(toolId);
@@ -114,11 +135,12 @@ export default function ToolsPage() {
     { title: '启用', dataIndex: 'enabled', width: 80, render: (value) => (value ? '是' : '否') },
     {
       title: '操作',
-      width: 180,
+      width: 244,
       render: (_, row) => (
         <span className="table-actions">
           <Button size="small" onClick={() => edit(row)}>编辑</Button>
           <Button size="small" icon={<ExperimentOutlined />} onClick={() => test(row)}>测试</Button>
+          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => void remove(row)}>删除</Button>
         </span>
       ),
     },
