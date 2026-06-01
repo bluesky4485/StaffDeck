@@ -291,7 +291,6 @@ export default function SkillsPage() {
             title="调用排行榜"
             rows={rankingRows.calls.slice(0, 5)}
             value={(row) => `${row.total_call_count || 0} 次`}
-            version={(row) => rankingVersionText(row, 'total')}
             onMore={() => setRankingModal({ mode: 'calls', scope: 'total' })}
           />
         </Col>
@@ -426,7 +425,7 @@ function RankingCard({
   title: string;
   rows: RankedSkill[];
   value: (row: RankedSkill) => string;
-  version: (row: RankedSkill) => string;
+  version?: (row: RankedSkill) => string;
   scope?: RankingScope;
   onScopeChange?: (scope: RankingScope) => void;
   onMore: () => void;
@@ -441,7 +440,7 @@ function RankingCard({
               size="small"
               value={scope}
               options={[
-                { label: '当前运行', value: 'current' },
+                { label: '当前', value: 'current' },
                 { label: '总榜', value: 'total' },
               ]}
               onChange={(value) => onScopeChange(value as RankingScope)}
@@ -462,8 +461,8 @@ function RankingCard({
             <span className="skill-ranking-index">{row.rank}</span>
             <span className="skill-ranking-main">
               <span className="skill-ranking-name" title={row.name}>{row.name}</span>
-              <span className="skill-ranking-version">{version(row)}</span>
             </span>
+            {version && <span className="skill-ranking-version">{version(row)}</span>}
             <strong>{value(row)}</strong>
           </div>
         ))
@@ -497,8 +496,8 @@ function percent(value: number | undefined): string {
 
 function rankingTitle(mode: RankingMode, scope: RankingScope): string {
   if (mode === 'calls') return '完整排行：全历史调用';
-  if (mode === 'positive') return scope === 'current' ? '完整排行：当前运行版本好评率' : '完整排行：历史总榜好评率';
-  return scope === 'current' ? '完整排行：当前运行版本差评率' : '完整排行：历史总榜差评率';
+  if (mode === 'positive') return scope === 'current' ? '完整排行：当前版本好评率' : '完整排行：历史总榜好评率';
+  return scope === 'current' ? '完整排行：当前版本差评率' : '完整排行：历史总榜差评率';
 }
 
 function rankingRowsFor(
@@ -518,7 +517,7 @@ function rankingRowsFor(
 }
 
 function rankingVersionText(row: SkillRead, scope: RankingScope): string {
-  return scope === 'current' ? `当前 v${row.version}` : `全部版本（当前 v${row.version}）`;
+  return scope === 'current' ? `v${row.version}` : '全版本';
 }
 
 function rankingMetricTitle(mode: RankingMode, scope: RankingScope): string {
