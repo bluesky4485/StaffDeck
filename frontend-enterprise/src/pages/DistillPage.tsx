@@ -402,16 +402,25 @@ export default function DistillPage() {
     }
   }
 
-  async function rewriteSelectedTarget(text: string, currentDraft: SkillCard | null = draft) {
+  async function rewriteSelectedTarget(
+    text: string,
+    currentDraft: SkillCard | null = draft,
+    targetPathsOverride?: string[],
+    initialThinkingDetails?: string[],
+  ) {
     if (!currentDraft) return;
     const previousDraft = cloneSkill(currentDraft);
-    const targets = selectedPaths.length > 0 ? selectedPaths : allTargetPaths(currentDraft);
+    const targets = targetPathsOverride?.length
+      ? targetPathsOverride
+      : selectedPaths.length > 0
+        ? selectedPaths
+        : allTargetPaths(currentDraft);
     const scopeLabel = targetLabel(targets, currentDraft);
     setLoading(true);
     setStreamStatus('正在改写选中内容');
     const assistantId = pushMessage('assistant', '', {
       thinking: 'running',
-      thinkingDetails: [`改写范围：${scopeLabel}`],
+      thinkingDetails: initialThinkingDetails || [`改写范围：${scopeLabel}`],
       thinkingOpen: false,
     });
     const controller = new AbortController();
@@ -635,32 +644,34 @@ export default function DistillPage() {
   }
 
   async function confirmToolSuggestion(messageId: string, suggestion: ToolSuggestionItem) {
+    if (loading) return;
+    const activeDraft = pendingChange?.nextDraft || draft;
     try {
-      await api.post('/api/enterprise/tools', {
-        tenant_id: TENANT_ID,
-        name: suggestion.name,
-        display_name: suggestion.display_name || suggestion.name,
-        description: suggestion.description || suggestion.reason || '',
-        method: suggestion.method || 'POST',
-        url: suggestion.url || `/api/mock/${suggestion.name.replace(/\./g, '/')}`,
-        headers: {},
-        auth: {},
-        input_schema: suggestion.input_schema || {},
-        output_schema: suggestion.output_schema || {},
-        allowed_skills: draft ? [draft.skill_id] : [],
-        enabled: true,
-      });
-      setTools((current) => upsertToolSuggestion(current, suggestion, draft?.skill_id));
-      setToolSuggestionStatus(messageId, suggestion.name, 'created');
-      message.success('工具已新增');
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('409')) {
-        setTools((current) => upsertToolSuggestion(current, suggestion, draft?.skill_id));
-        setToolSuggestionStatus(messageId, suggestion.name, 'created');
-        message.info('工具已存在，已按已新增处理');
-        return;
+      let createdTool: ToolRead;
+      const payload = toolPayloadFromSuggestion(suggestion, activeDraft?.skill_id);
+      try {
+        createdTool = await api.post<ToolRead>('/api/enterprise/tools', payload);
+        message.success('工具已新增');
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.includes('409')) throw error;
+        createdTool = toolReadFromSuggestion(suggestion, activeDraft?.skill_id);
+        message.info('工具已存在，继续更新技能草稿');
       }
-      message.error(error instanceof Error ? error.message : '新增工具失败');
+      setTools((current) => upsertToolRead(current, createdTool));
+      setToolSuggestionStatus(messageId, suggestion.name, 'created');
+      if (!activeDraft) return;
+      confirmPendingChange(false);
+      await rewriteSelectedTarget(
+        buildToolIntegrationInstruction(suggestion),
+        activeDraft,
+        allTargetPaths(activeDraft),
+        [
+          `已新增工具：${suggestion.display_name || suggestion.name}`,
+          '正在判断该工具应接入哪些步骤',
+        ],
+      );
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '新增工具或更新技能失败');
     }
   }
 
@@ -2263,12 +2274,25 @@ function buildToolDescriptionMap(tools: ToolRead[]): ToolDescriptionMap {
   }, {});
 }
 
-function upsertToolSuggestion(
-  current: ToolRead[],
-  suggestion: ToolSuggestionItem,
-  skillId?: string,
-): ToolRead[] {
-  const nextTool: ToolRead = {
+function toolPayloadFromSuggestion(suggestion: ToolSuggestionItem, skillId?: string): Record<string, unknown> {
+  return {
+    tenant_id: TENANT_ID,
+    name: suggestion.name,
+    display_name: suggestion.display_name || suggestion.name,
+    description: suggestion.description || suggestion.reason || '',
+    method: suggestion.method || 'POST',
+    url: suggestion.url || `/api/mock/${suggestion.name.replace(/\./g, '/')}`,
+    headers: {},
+    auth: {},
+    input_schema: suggestion.input_schema || {},
+    output_schema: suggestion.output_schema || {},
+    allowed_skills: skillId ? [skillId] : [],
+    enabled: true,
+  };
+}
+
+function toolReadFromSuggestion(suggestion: ToolSuggestionItem, skillId?: string): ToolRead {
+  return {
     id: suggestion.name,
     tenant_id: TENANT_ID,
     name: suggestion.name,
@@ -2284,10 +2308,30 @@ function upsertToolSuggestion(
     enabled: true,
     updated_at: new Date().toISOString(),
   };
-  const exists = current.some((tool) => tool.name === suggestion.name);
+}
+
+function upsertToolRead(current: ToolRead[], nextTool: ToolRead): ToolRead[] {
+  const exists = current.some((tool) => tool.name === nextTool.name);
   return exists
-    ? current.map((tool) => (tool.name === suggestion.name ? { ...tool, ...nextTool, id: tool.id } : tool))
+    ? current.map((tool) => (tool.name === nextTool.name ? { ...tool, ...nextTool, id: nextTool.id || tool.id } : tool))
     : [...current, nextTool];
+}
+
+function buildToolIntegrationInstruction(suggestion: ToolSuggestionItem): string {
+  const displayName = suggestion.display_name || suggestion.name;
+  const toolDetail = {
+    name: suggestion.name,
+    display_name: displayName,
+    description: suggestion.description || '',
+    input_schema: suggestion.input_schema || {},
+    output_schema: suggestion.output_schema || {},
+  };
+  return [
+    `工具「${displayName}」（${suggestion.name}）已经新增到工具配置。`,
+    `请更新当前技能：判断该工具应接入哪些步骤，并只在确实需要调用该工具的步骤中加入 allowed_actions: call_tool:${suggestion.name}。`,
+    '同步改写对应步骤说明，使模型在参数满足时调用该工具，并根据工具结果继续推进或给出最终回复；不要修改无关字段。',
+    `工具详情：${JSON.stringify(toolDetail, null, 2)}`,
+  ].join('\n');
 }
 
 function fieldLabel(field: string): string {
