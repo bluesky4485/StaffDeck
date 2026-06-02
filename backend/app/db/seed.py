@@ -278,8 +278,13 @@ PRODUCT_PURCHASE_TOOL = {
     "output_schema": {
         "type": "object",
         "properties": {
+            "found": {"type": "boolean"},
             "order_id": {"type": "string"},
             "purchase_id": {"type": "string"},
+            "product_id": {"type": "string"},
+            "display_name": {"type": "string"},
+            "quantity": {"type": "integer"},
+            "unit_price": {"type": "number"},
             "payment_status": {"type": "string"},
             "order_status": {"type": "string"},
             "total_amount": {"type": "number"},
@@ -313,10 +318,13 @@ ORDER_ADD_TOOL = {
     "output_schema": {
         "type": "object",
         "properties": {
+            "found": {"type": "boolean"},
             "order_id": {"type": "string"},
             "user_id": {"type": "string"},
             "product_id": {"type": "string"},
+            "display_name": {"type": "string"},
             "quantity": {"type": "integer"},
+            "unit_price": {"type": "number"},
             "status": {"type": "string"},
             "total_amount": {"type": "number"},
             "currency": {"type": "string"},

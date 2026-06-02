@@ -17,7 +17,7 @@ import {
   ToolOutlined,
 } from '@ant-design/icons';
 import { Button, Empty, Input, Modal, Typography, message } from 'antd';
-import type { MouseEvent } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SHOW_DEBUG, TENANT_ID, api, clearAuthSession, getAuthSession, streamChatTurn } from '../api/client';
@@ -82,6 +82,156 @@ function createTurnTrace(): TurnTrace {
 
 function normalizeMessageText(value?: string): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+}
+
+function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  const pattern = /(`[^`]*`|\*\*[^*]+?\*\*|\[[^\]]+\]\(https?:\/\/[^)\s]+\))/g;
+  let cursor = 0;
+  let index = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > cursor) {
+      nodes.push(text.slice(cursor, match.index));
+    }
+    const token = match[0];
+    const key = `${keyPrefix}-inline-${index}`;
+    if (token.startsWith('`') && token.endsWith('`')) {
+      nodes.push(<code key={key}>{token.slice(1, -1)}</code>);
+    } else if (token.startsWith('**') && token.endsWith('**')) {
+      nodes.push(<strong key={key}>{renderInlineMarkdown(token.slice(2, -2), key)}</strong>);
+    } else {
+      const link = token.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/);
+      if (link) {
+        nodes.push(
+          <a key={key} href={link[2]} target="_blank" rel="noreferrer">
+            {link[1]}
+          </a>,
+        );
+      } else {
+        nodes.push(token);
+      }
+    }
+    cursor = match.index + token.length;
+    index += 1;
+  }
+
+  if (cursor < text.length) {
+    nodes.push(text.slice(cursor));
+  }
+  return nodes;
+}
+
+function renderInlineLines(lines: string[], keyPrefix: string): ReactNode[] {
+  return lines.flatMap((line, lineIndex) => {
+    const nodes = renderInlineMarkdown(line, `${keyPrefix}-line-${lineIndex}`);
+    if (lineIndex === 0) return nodes;
+    return [<br key={`${keyPrefix}-br-${lineIndex}`} />, ...nodes];
+  });
+}
+
+function isBlockBoundary(line: string): boolean {
+  const trimmed = line.trim();
+  return (
+    trimmed.startsWith('```') ||
+    /^#{1,6}\s+/.test(trimmed) ||
+    /^[-*]\s+/.test(trimmed) ||
+    /^\d+[.)]\s+/.test(trimmed)
+  );
+}
+
+function renderMarkdownBlocks(content: string): ReactNode[] {
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  const blocks: ReactNode[] = [];
+  let index = 0;
+  let blockIndex = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    const key = `md-${blockIndex}`;
+    if (!trimmed) {
+      index += 1;
+      continue;
+    }
+
+    if (trimmed.startsWith('```')) {
+      const language = trimmed.slice(3).trim();
+      const codeLines: string[] = [];
+      index += 1;
+      while (index < lines.length && !lines[index].trim().startsWith('```')) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+      if (index < lines.length) index += 1;
+      blocks.push(
+        <pre key={key} className="md-code-block">
+          <code data-language={language || undefined}>{codeLines.join('\n')}</code>
+        </pre>,
+      );
+      blockIndex += 1;
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      const level = Math.min(heading[1].length, 4) as 1 | 2 | 3 | 4;
+      const Tag = `h${level}` as keyof JSX.IntrinsicElements;
+      blocks.push(<Tag key={key}>{renderInlineMarkdown(heading[2], key)}</Tag>);
+      index += 1;
+      blockIndex += 1;
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      const items: string[] = [];
+      while (index < lines.length && /^[-*]\s+/.test(lines[index].trim())) {
+        items.push(lines[index].trim().replace(/^[-*]\s+/, ''));
+        index += 1;
+      }
+      blocks.push(
+        <ul key={key}>
+          {items.map((item, itemIndex) => (
+            <li key={`${key}-${itemIndex}`}>{renderInlineMarkdown(item, `${key}-${itemIndex}`)}</li>
+          ))}
+        </ul>,
+      );
+      blockIndex += 1;
+      continue;
+    }
+
+    if (/^\d+[.)]\s+/.test(trimmed)) {
+      const items: string[] = [];
+      while (index < lines.length && /^\d+[.)]\s+/.test(lines[index].trim())) {
+        items.push(lines[index].trim().replace(/^\d+[.)]\s+/, ''));
+        index += 1;
+      }
+      blocks.push(
+        <ol key={key}>
+          {items.map((item, itemIndex) => (
+            <li key={`${key}-${itemIndex}`}>{renderInlineMarkdown(item, `${key}-${itemIndex}`)}</li>
+          ))}
+        </ol>,
+      );
+      blockIndex += 1;
+      continue;
+    }
+
+    const paragraphLines: string[] = [];
+    while (index < lines.length && lines[index].trim() && !isBlockBoundary(lines[index])) {
+      paragraphLines.push(lines[index]);
+      index += 1;
+    }
+    blocks.push(<p key={key}>{renderInlineLines(paragraphLines, key)}</p>);
+    blockIndex += 1;
+  }
+
+  return blocks;
+}
+
+function MarkdownMessage({ content }: { content: string }) {
+  return <div className="assistant-answer markdown-message">{renderMarkdownBlocks(content)}</div>;
 }
 
 function parseMessageTime(value?: string): number {
@@ -1049,7 +1199,11 @@ export default function ChatWindowPage() {
                         </div>
                       )}
                       {item.content ? (
-                        <div className="assistant-answer">{item.content}</div>
+                        item.role === 'assistant' ? (
+                          <MarkdownMessage content={item.content} />
+                        ) : (
+                          <div className="plain-answer">{item.content}</div>
+                        )
                       ) : item.role === 'assistant' && item.isStreaming && !summary ? (
                         <span className="typing-caret" />
                       ) : null}

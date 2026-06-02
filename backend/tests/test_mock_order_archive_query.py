@@ -54,6 +54,38 @@ def test_product_purchase_persists_queryable_order() -> None:
     assert result["quantity"] == 2
     assert result["payment_status"] == "paid"
     assert result["refundable"] is True
+    assert result["total_amount"] == 258.0
+
+
+def test_product_purchase_uses_name_catalog_price_for_a3() -> None:
+    with _test_session() as db:
+        purchase = mock_product_purchase(
+            MockProductPurchaseRequest(user_id="user_demo", product_id="a3", quantity=1),
+            db,
+        )
+
+        result = mock_order_query(MockOrderQueryRequest(order_id=purchase["order_id"]), db)
+
+    assert purchase["found"] is True
+    assert purchase["product_id"] == "A3"
+    assert purchase["display_name"] == "A3 高阶商品"
+    assert purchase["unit_price"] == 239.0
+    assert purchase["total_amount"] == 239.0
+    assert result["found"] is True
+    assert result["product_id"] == "A3"
+    assert result["total_amount"] == 239.0
+
+
+def test_product_purchase_returns_miss_for_unknown_product() -> None:
+    with _test_session() as db:
+        purchase = mock_product_purchase(
+            MockProductPurchaseRequest(user_id="user_demo", product_id="UNKNOWN", quantity=1),
+            db,
+        )
+
+    assert purchase["found"] is False
+    assert purchase["miss_reason"] == "product_not_found"
+    assert "order_id" not in purchase
 
 
 def test_order_add_persists_queryable_order() -> None:
@@ -69,6 +101,7 @@ def test_order_add_persists_queryable_order() -> None:
     assert result["order_id"] == added["order_id"]
     assert result["product_id"] == "A3"
     assert result["status"] == "created"
+    assert result["total_amount"] == 239.0
 
 
 def test_product_price_query_returns_price_by_product_name() -> None:
@@ -78,6 +111,14 @@ def test_product_price_query_returns_price_by_product_name() -> None:
     assert result["source"] == "mock_product_price_catalog"
     assert result["display_name"] == "iPhone 15"
     assert result["price"] == 4599.0
+
+
+def test_product_price_query_accepts_display_name_alias() -> None:
+    result = mock_product_price_query(MockProductPriceQueryRequest(product_name="A3 高阶商品"))
+
+    assert result["found"] is True
+    assert result["product_id"] == "A3"
+    assert result["price"] == 239.0
 
 
 def test_product_price_query_is_not_seeded_as_configured_tool() -> None:

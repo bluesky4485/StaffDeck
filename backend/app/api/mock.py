@@ -15,9 +15,30 @@ from app.db.models import MockOrder, utc_now
 router = APIRouter(prefix="/api/mock", tags=["mock"])
 
 PRODUCT_CATALOG = {
-    "SKU-001": Decimal("99.00"),
-    "SKU-002": Decimal("199.00"),
-    "SKU-003": Decimal("299.00"),
+    "SKU-001": {
+        "product_id": "SKU-001",
+        "display_name": "SKU-001",
+        "brand": "Mock",
+        "price": Decimal("99.00"),
+        "currency": "CNY",
+        "spec": "standard",
+    },
+    "SKU-002": {
+        "product_id": "SKU-002",
+        "display_name": "SKU-002",
+        "brand": "Mock",
+        "price": Decimal("199.00"),
+        "currency": "CNY",
+        "spec": "standard",
+    },
+    "SKU-003": {
+        "product_id": "SKU-003",
+        "display_name": "SKU-003",
+        "brand": "Mock",
+        "price": Decimal("299.00"),
+        "currency": "CNY",
+        "spec": "standard",
+    },
 }
 
 PRODUCT_NAME_CATALOG = {
@@ -131,14 +152,19 @@ def mock_order_archive_query(request: MockOrderQueryRequest) -> dict[str, Any]:
 def mock_product_purchase(
     request: MockProductPurchaseRequest, db: Session = Depends(get_session)
 ) -> dict[str, Any]:
-    unit_price = _mock_price(request.product_id)
+    record = _find_product_record(request.product_id)
+    if not record:
+        return _product_miss(request.product_id)
+    unit_price = record["price"]
     total_amount = unit_price * Decimal(request.quantity)
     order_id = f"MOCK{uuid4().hex[:10].upper()}"
     result = {
+        "found": True,
         "order_id": order_id,
         "purchase_id": f"PUR{uuid4().hex[:10].upper()}",
         "user_id": request.user_id,
-        "product_id": request.product_id,
+        "product_id": record["product_id"],
+        "display_name": record["display_name"],
         "sku_id": request.sku_id,
         "quantity": request.quantity,
         "unit_price": float(unit_price),
@@ -153,7 +179,7 @@ def mock_product_purchase(
         db,
         order_id=order_id,
         user_id=request.user_id,
-        product_id=request.product_id,
+        product_id=record["product_id"],
         sku_id=request.sku_id,
         quantity=request.quantity,
         status="paid",
@@ -170,16 +196,9 @@ def mock_product_purchase(
 @router.post("/product/price_query")
 def mock_product_price_query(request: MockProductPriceQueryRequest) -> dict[str, Any]:
     product_name = request.product_name.strip()
-    normalized_name = _normalize_product_name(product_name)
-    record = PRODUCT_NAME_CATALOG.get(normalized_name)
+    record = _find_product_record(product_name)
     if not record:
-        return {
-            "product_name": product_name,
-            "found": False,
-            "results": [],
-            "miss_reason": "product_name_not_found",
-            "hint": "可尝试使用 iPhone 15、三星S24、小米14、A1 或 A3 作为 mock 商品名。",
-        }
+        return _product_miss(product_name)
     return {
         "product_name": product_name,
         "found": True,
@@ -198,13 +217,18 @@ def mock_product_price_query(request: MockProductPriceQueryRequest) -> dict[str,
 def mock_order_add(
     request: MockOrderAddRequest, db: Session = Depends(get_session)
 ) -> dict[str, Any]:
-    unit_price = _mock_price(request.product_id)
+    record = _find_product_record(request.product_id)
+    if not record:
+        return _product_miss(request.product_id)
+    unit_price = record["price"]
     total_amount = unit_price * Decimal(request.quantity)
     order_id = _normalize_id(request.order_id) if request.order_id else f"ADD{uuid4().hex[:10].upper()}"
     result = {
+        "found": True,
         "order_id": order_id,
         "user_id": request.user_id,
-        "product_id": request.product_id,
+        "product_id": record["product_id"],
+        "display_name": record["display_name"],
         "sku_id": request.sku_id,
         "quantity": request.quantity,
         "unit_price": float(unit_price),
@@ -217,7 +241,7 @@ def mock_order_add(
         db,
         order_id=order_id,
         user_id=request.user_id,
-        product_id=request.product_id,
+        product_id=record["product_id"],
         sku_id=request.sku_id,
         quantity=request.quantity,
         status=request.status,
@@ -230,8 +254,31 @@ def mock_order_add(
     return result
 
 
-def _mock_price(product_id: str) -> Decimal:
-    return PRODUCT_CATALOG.get(_normalize_id(product_id), Decimal("129.00"))
+def _find_product_record(value: str) -> dict[str, Any] | None:
+    normalized_id = _normalize_id(value)
+    if normalized_id in PRODUCT_CATALOG:
+        return PRODUCT_CATALOG[normalized_id]
+
+    normalized_name = _normalize_product_name(value)
+    if normalized_name in PRODUCT_NAME_CATALOG:
+        return PRODUCT_NAME_CATALOG[normalized_name]
+
+    for record in (*PRODUCT_CATALOG.values(), *PRODUCT_NAME_CATALOG.values()):
+        if _normalize_id(record["product_id"]) == normalized_id:
+            return record
+        if _normalize_product_name(record["display_name"]) == normalized_name:
+            return record
+    return None
+
+
+def _product_miss(product_name: str) -> dict[str, Any]:
+    return {
+        "product_name": product_name,
+        "found": False,
+        "results": [],
+        "miss_reason": "product_not_found",
+        "hint": "可尝试使用 iPhone 15、三星S24、小米14、A1、A3 或 SKU-001/SKU-002/SKU-003 作为 mock 商品名。",
+    }
 
 
 def _normalize_id(value: str) -> str:
