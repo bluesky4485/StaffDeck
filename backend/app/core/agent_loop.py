@@ -266,6 +266,7 @@ class AgentLoop:
                 tools,
                 model_config,
                 router_decision,
+                memory_context,
                 repair_stream_events,
             )
             self.db.commit()
@@ -534,7 +535,7 @@ class AgentLoop:
             {"active_skill_id": chat_session.active_skill_id, "active_step_id": chat_session.active_step_id},
         )
         step_result = self._run_step_agent_with_context_repair(
-            request, chat_session, active_skill, tools, model_config, router_decision
+            request, chat_session, active_skill, tools, model_config, router_decision, memory_context
         )
 
         tool_result: ToolResult | None = None
@@ -675,6 +676,7 @@ class AgentLoop:
                 tools,
                 model_config,
                 pending_decision,
+                memory_context,
                 repair_stream_events,
             )
             self.db.commit()
@@ -1153,7 +1155,7 @@ class AgentLoop:
             tools,
             model_config,
             router_decision,
-            stream_events,
+            stream_events=stream_events,
         )
         self.db.commit()
         self.db.refresh(chat_session)
@@ -1372,10 +1374,17 @@ class AgentLoop:
         tools: list[Tool],
         model_config: ModelConfig,
         router_decision: RouterDecision,
+        memory_context: list[dict[str, object]] | None = None,
         stream_events: list[tuple[str, dict[str, object]]] | None = None,
     ) -> StepAgentResult:
         step_result = self._run_step_agent_once(
-            request, chat_session, active_skill, tools, model_config, router_decision
+            request,
+            chat_session,
+            active_skill,
+            tools,
+            model_config,
+            router_decision,
+            memory_context=memory_context,
         )
         self._apply_step_result(request.tenant_id, chat_session, step_result)
         step_result = self._retry_slot_validation_if_needed(
@@ -1386,6 +1395,7 @@ class AgentLoop:
             model_config,
             router_decision,
             step_result,
+            memory_context,
         )
 
         advanced = self._advance_past_satisfied_collection_steps(
@@ -1413,6 +1423,7 @@ class AgentLoop:
                 model_config,
                 router_decision,
                 repair_reason="satisfied_step_advanced",
+                memory_context=memory_context,
             )
             self._apply_step_result(request.tenant_id, chat_session, step_result)
             self._advance_past_satisfied_collection_steps(
@@ -1451,6 +1462,7 @@ class AgentLoop:
         model_config: ModelConfig,
         router_decision: RouterDecision,
         step_result: StepAgentResult,
+        memory_context: list[dict[str, object]] | None = None,
     ) -> StepAgentResult:
         missing_fields = self._missing_expected_fields(active_skill, chat_session)
         if (
@@ -1475,6 +1487,7 @@ class AgentLoop:
                 "missing_expected_user_info": missing_fields,
                 "previous_step_result": step_result.model_dump(mode="json"),
             },
+            memory_context=memory_context,
         )
         if not self._step_result_has_progress(validation_result):
             return step_result
@@ -1551,6 +1564,7 @@ class AgentLoop:
         router_decision: RouterDecision | None = None,
         repair_reason: str | None = None,
         repair_context: dict[str, object] | None = None,
+        memory_context: list[dict[str, object]] | None = None,
     ) -> StepAgentResult:
         step_result = self.step_agent.run(
             request.message,
@@ -1561,6 +1575,7 @@ class AgentLoop:
             router_decision,
             repair_context,
             self._recent_messages(chat_session),
+            memory_context,
         )
         payload = step_result.model_dump()
         if repair_reason:

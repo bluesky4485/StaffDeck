@@ -14,6 +14,7 @@ class SkillRuntime:
             "summary": session.summary,
             "last_agent_question": session.last_agent_question,
         }
+        current_frame_with_hints = _frame_with_slot_hints(current_frame, decision.slot_hints)
 
         if decision.decision == "start_skill":
             session.skill_stack_json = _without_skill(session.skill_stack_json, decision.target_skill_id)
@@ -31,7 +32,7 @@ class SkillRuntime:
             "answer_chitchat_then_resume",
         }:
             if session.active_skill_id and session.active_step_id:
-                session.resume_after_answer_json = current_frame
+                session.resume_after_answer_json = current_frame_with_hints
             current_skill_id = current_frame["skill_id"]
             if (
                 decision.target_skill_id
@@ -42,7 +43,7 @@ class SkillRuntime:
                     session.skill_stack_json, decision.target_skill_id
                 )
                 stack = _without_skill(stack, str(current_skill_id))
-                stack.append(current_frame)
+                stack.append(current_frame_with_hints)
                 session.skill_stack_json = stack
                 if target_frame:
                     session.active_skill_id = target_frame.get("skill_id")
@@ -189,3 +190,11 @@ def _without_skill(stack_json: list[dict] | None, skill_id: str | None) -> list[
     if not skill_id:
         return list(stack_json or [])
     return [frame for frame in list(stack_json or []) if frame.get("skill_id") != skill_id]
+
+
+def _frame_with_slot_hints(frame: dict, slot_hints: dict | None) -> dict:
+    if not slot_hints:
+        return frame
+    next_frame = dict(frame)
+    next_frame["slots"] = {**(next_frame.get("slots") or {}), **dict(slot_hints)}
+    return next_frame

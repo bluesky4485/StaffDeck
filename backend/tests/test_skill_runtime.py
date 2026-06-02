@@ -160,17 +160,23 @@ def test_related_question_to_another_skill_suspends_and_restores_original_contex
             target_skill_id="price_compare",
             target_step_id="collect_products",
             should_resume_after_answer=True,
+            slot_hints={"user_name": "hm", "product_name_1": "A1", "product_name_2": "A3"},
         ),
     )
 
     assert session.active_skill_id == "price_compare"
     assert session.active_step_id == "collect_products"
-    assert session.slots_json == {}
+    assert session.slots_json == {"user_name": "hm", "product_name_1": "A1", "product_name_2": "A3"}
     assert session.skill_stack_json == [
         {
             "skill_id": "purchase",
             "step_id": "collect_user_name",
-            "slots": {"product_id": "A1"},
+            "slots": {
+                "product_id": "A1",
+                "user_name": "hm",
+                "product_name_1": "A1",
+                "product_name_2": "A3",
+            },
             "summary": "最近回复：请问姓名和数量",
             "last_agent_question": "请问姓名和数量？",
         }
@@ -182,7 +188,12 @@ def test_related_question_to_another_skill_suspends_and_restores_original_contex
 
     assert session.active_skill_id == "purchase"
     assert session.active_step_id == "collect_user_name"
-    assert session.slots_json == {"product_id": "A1"}
+    assert session.slots_json == {
+        "product_id": "A1",
+        "user_name": "hm",
+        "product_name_1": "A1",
+        "product_name_2": "A3",
+    }
     assert session.skill_stack_json == []
     assert session.resume_after_answer_json is None
 

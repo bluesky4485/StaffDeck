@@ -52,6 +52,13 @@ def test_step_agent_uses_model_json_for_slots_and_tool(monkeypatch):
         recent_messages=[
             {"role": "user", "content": "我是张三，设备 EQ-9 无法启动"},
         ],
+        memory_context=[
+            {
+                "kind": "profile",
+                "content": "用户姓名/称呼：张三",
+                "metadata": {"key": "preferred_name"},
+            }
+        ],
     )
 
     assert captured["payload"]["active_skill"]["skill_id"] == "repair_ticket"
@@ -59,6 +66,7 @@ def test_step_agent_uses_model_json_for_slots_and_tool(monkeypatch):
     assert captured["payload"]["active_step"]["step_id"] == "collect_issue"
     assert captured["payload"]["router_decision"]["user_intent"] == "设备报修"
     assert captured["payload"]["recent_messages"][0]["content"] == "我是张三，设备 EQ-9 无法启动"
+    assert captured["payload"]["memory_context"][0]["metadata"]["key"] == "preferred_name"
     assert captured["payload"]["last_agent_question"] == "请描述设备问题。"
     assert "repair_context" in captured["payload"]
     assert result.slot_updates["asset_id"] == "EQ-9"
