@@ -1073,9 +1073,9 @@ export default function ChatWindowPage() {
             onClick={toggleSidebar}
           />
           <div className="brand-block">
-            <span className="brand-mark">SA</span>
+            <span className="brand-mark">UR</span>
             <div>
-              <div className="brand-title">Skill Agent</div>
+              <div className="brand-title">UltraRAG4</div>
               <div className="brand-subtitle">{auth?.user.display_name || auth?.user.username}</div>
             </div>
           </div>

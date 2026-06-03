@@ -29,10 +29,10 @@ function Shell() {
     <Layout className="app-shell">
       <Sider width={232} theme="light" className="sidebar">
         <div className="brand">
-            <span className="brand-mark">SA</span>
+            <span className="brand-mark">UR</span>
             <div>
-            <div className="brand-title">Skill Agent</div>
-            <div className="brand-subtitle">Control Desk</div>
+            <div className="brand-title">UltraRAG4</div>
+            <div className="brand-subtitle">Skill Studio</div>
             </div>
           </div>
         <div className="nav-label">Workspace</div>
@@ -66,8 +66,8 @@ function Shell() {
       <Layout>
         <Header className="topbar">
           <div>
-            <Typography.Text strong>Enterprise Console</Typography.Text>
-            <div className="topbar-subtitle">Skill, tool, model and persona configuration</div>
+            <Typography.Text strong>Skill Studio</Typography.Text>
+            <div className="topbar-subtitle">Skill, tool, memory and persona workspace</div>
           </div>
           <div className="topbar-actions">
             <Button icon={<UserOutlined />} onClick={() => navigate('/enterprise/persona')}>人设</Button>
