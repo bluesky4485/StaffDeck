@@ -10,7 +10,12 @@ from app.db.models import ModelConfig
 from app.llm import LLMClient, LLMError
 from app.skills.llm_limits import skill_model_config
 from app.skills.skill_schema import SkillCard, SkillRewriteRequest, SkillRewriteResponse
-from app.skills.skill_distiller import _compact_warnings, _normalize_tool_suggestions, _remove_unknown_tool_actions
+from app.skills.skill_distiller import (
+    _compact_warnings,
+    _normalize_tool_suggestions,
+    _remove_unknown_tool_actions,
+    _tool_resolution_warnings,
+)
 from app.skills.step_ids import skill_card_with_unique_step_ids
 
 
@@ -127,7 +132,7 @@ class SkillEditor:
         for tool_name in missing_tool_names:
             warning = (
                 f"改写结果引用了未配置工具 {tool_name}，已移出 allowed_actions；"
-                "如确需该工具，模型必须在 tool_suggestions 中提供完整工具定义。"
+                "如确需该工具，模型必须在 tool_mentions 中提供来自上下文的完整工具提及。"
             )
             if warning not in warnings:
                 warnings.append(warning)
@@ -135,11 +140,15 @@ class SkillEditor:
         changed_paths = [str(item) for item in raw.get("changed_paths", []) if str(item).strip()]
         if not changed_paths and merged.model_dump() != request.current_skill.model_dump():
             changed_paths = _changed_paths(request.current_skill, merged)
-        tool_suggestions = _normalize_tool_suggestions(
-            raw.get("tool_suggestions"),
+        tool_resolutions = _normalize_tool_suggestions(
+            raw.get("tool_mentions") if isinstance(raw.get("tool_mentions"), list) else raw.get("tool_suggestions"),
             request,
             missing_tool_names,
         )
+        warnings = _compact_warnings([*warnings, *_tool_resolution_warnings(tool_resolutions)])
+        tool_suggestions = [
+            item for item in tool_resolutions if item.resolution_status in {"existing", "new_candidate"}
+        ]
         return SkillRewriteResponse(
             draft_skill=merged,
             assistant_message=assistant_message,

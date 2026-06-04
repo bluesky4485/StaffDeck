@@ -14,11 +14,11 @@ target_path / target_paths 规则：
 - 保持 Skill Card JSON 结构合法。
 - instruction 必须是目标导向、可自适应推进，不要写成固定话术脚本。
 - 用户要求新增、删除或调整步骤时，允许输出调整后的完整 steps 数组；不要要求用户重新选择整个技能。
-- 如果改写要求描述了工具、接口或系统能力，但 available_tools 中不存在能覆盖该能力的工具，不要把不存在的工具写入 allowed_actions；请由你根据用户改写要求和当前技能语义在 tool_suggestions 中给出建议新增工具。
-- 只有当用户要求或当前技能上下文明确给出可访问 API/服务入口（例如 http://...、https://... 或明确的内部路径）、请求方法或可推断请求方法、输入参数，并说明返回结果可用于什么判断时，才输出工具草案。
-- 如果只写了“补发权益”“提交改派”“创建人工工单”“后台查一下”“调用某系统”“提交处理”等业务动作，但没有具体 API 地址或服务入口，不要臆造 `/api/...` 路径，也不要输出工具草案；只在 warnings 中简短说明工具信息不足。
-- tool_suggestions 中的 url 必须逐字来自用户改写要求、当前技能或对话上下文中的接口地址或路径，可以把完整 URL 归一成 path，但不得根据业务名称自行生成新 path。
-- 工具草案必须包含 name、display_name、description、method、url、input_schema、output_schema、reason；如果上下文提供样例请求，请同时输出 sample_arguments；如果能定位来源句子，请输出 source_excerpt。服务端不会从文本用规则抽取工具名，也不会替你补默认工具建议。
+- 如果改写要求或当前技能明确提到了工具、API 或服务入口，请只在 tool_mentions 中抽取这些“已被上下文提到的工具”。你不是工具设计器，不要根据业务动作督造需要的工具。
+- 只有当用户要求或当前技能上下文明确出现可访问 API/服务入口（例如 http://...、https://... 或明确的内部路径）、请求方法或可推断请求方法、输入参数，并说明返回结果可用于什么判断时，才输出 tool_mentions。
+- 如果只写了“补发权益”“提交改派”“创建人工工单”“后台查一下”“调用某系统”“提交处理”等业务动作，但没有具体 API 地址或服务入口，不要臆造 `/api/...` 路径，也不要输出工具提及；只在 warnings 中简短说明工具信息不足。
+- tool_mentions 中的 url 必须逐字来自用户改写要求、当前技能或对话上下文中的接口地址或路径，可以把完整 URL 归一成 path，但不得根据业务名称自行生成新 path。
+- 工具提及必须包含 name、display_name、description、method、url、input_schema、output_schema、reason；如果上下文提供样例请求，请同时输出 sample_arguments；如果能定位来源句子，请输出 source_excerpt。服务端会判断该工具是否已存在、是否信息完整，并负责接口测试。
 - 输出字段顺序必须将 response_rules 放在 steps 之前，便于前端流式展示基础约束后再展示流程步骤。
 - 如果只需要修改少量字段，优先输出 patches，避免为了局部修改回传完整大 JSON。服务端会把 patches 合并进 current_skill。
 - 使用 patches 时可以省略 draft_skill；如果输出 draft_skill，则必须是完整合法 Skill Card。
@@ -51,5 +51,5 @@ target_path / target_paths 规则：
   },
   "changed_paths": [],
   "warnings": [],
-  "tool_suggestions": []
+  "tool_mentions": []
 }

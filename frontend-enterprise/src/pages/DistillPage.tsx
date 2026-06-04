@@ -746,13 +746,21 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
   }
 
   async function autoProbeToolSuggestions(messageId: string, suggestions: ToolSuggestionItem[]) {
-    const pendingSuggestions = suggestions.filter((suggestion) => !suggestion.probe_result);
-    if (pendingSuggestions.length === 0) return;
+    const extractedSuggestions = suggestions.filter((suggestion) => suggestion.resolution_status !== 'incomplete');
+    const pendingSuggestions = suggestions.filter(
+      (suggestion) => toolSuggestionResolution(suggestion) === 'new_candidate' && !suggestion.probe_result,
+    );
+    if (extractedSuggestions.length === 0) return;
 
     appendThinkingDetail(
       messageId,
-      `正在抽取工具：${pendingSuggestions.map((item) => item.display_name || item.name).join('、')}`,
+      `正在抽取工具：${extractedSuggestions.map((item) => item.display_name || item.name).join('、')}`,
     );
+    const existingSuggestions = suggestions.filter((suggestion) => toolSuggestionResolution(suggestion) === 'existing');
+    existingSuggestions.forEach((suggestion) => {
+      appendThinkingDetail(messageId, `已匹配现有工具：${suggestion.matched_tool_display_name || suggestion.display_name || suggestion.name}`);
+    });
+    if (pendingSuggestions.length === 0) return;
     appendThinkingDetail(messageId, '正在测试工具接口');
     setStreamStatus('正在测试工具接口');
 
@@ -787,6 +795,7 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
     suggestion: ToolSuggestionItem,
     options: ProbeToolOptions = {},
   ): Promise<ToolProbeResponse | null> {
+    if (toolSuggestionResolution(suggestion) !== 'new_candidate') return null;
     if ((!options.allowWhileLoading && loading) || suggestion.probeStatus === 'probing') return null;
     const args = options.sampleArguments || suggestion.sample_arguments || {};
     if (Object.keys(args).length === 0) {
@@ -860,6 +869,10 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
 
   async function confirmToolSuggestion(messageId: string, suggestion: ToolSuggestionItem) {
     if (loading) return;
+    if (toolSuggestionResolution(suggestion) !== 'new_candidate') {
+      message.warning('该工具不是可新增候选');
+      return;
+    }
     if (!suggestion.probe_result?.success) {
       message.warning('请先测试接口成功后再新增工具');
       return;
@@ -1424,7 +1437,9 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
                           <div className="skill-tool-suggestion" key={`${item.id}_${suggestion.name}`}>
                             <div>
                               <div className="skill-tool-suggestion-title">
-                                建议新增工具：{suggestion.display_name || suggestion.name}
+                                {toolSuggestionTitle(suggestion)}
+                                {toolSuggestionResolution(suggestion) === 'existing' && <Tag color="green">已存在</Tag>}
+                                {toolSuggestionResolution(suggestion) === 'new_candidate' && <Tag color="gold">待新增</Tag>}
                                 {suggestion.probeStatus === 'probing' && <Tag color="processing">测试中</Tag>}
                                 {suggestion.probe_result?.success && <Tag color="green">测试通过</Tag>}
                                 {suggestion.probe_result && !suggestion.probe_result.success && <Tag color="red">测试失败</Tag>}
@@ -1441,7 +1456,7 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
                               <Button size="small" onClick={() => openToolDetail(item.id, suggestion)}>
                                 详情
                               </Button>
-                              {suggestion.status !== 'created' && suggestion.status !== 'rejected' && (
+                              {toolSuggestionResolution(suggestion) === 'new_candidate' && suggestion.status !== 'created' && suggestion.status !== 'rejected' && (
                                 <>
                                   <Button
                                     size="small"
@@ -1686,10 +1701,14 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
         footer={
           <Space>
             <Button onClick={() => setToolDetail(null)}>关闭</Button>
-            <Button onClick={applyProbeArgumentsFromDetail}>应用样例参数</Button>
-            <Button type="primary" loading={toolDetail?.probeStatus === 'probing'} onClick={probeToolDetail}>
-              {toolDetail?.probe_result ? '再次测试' : '测试接口'}
-            </Button>
+            {toolDetail && toolSuggestionResolution(toolDetail) === 'new_candidate' && (
+              <>
+                <Button onClick={applyProbeArgumentsFromDetail}>应用样例参数</Button>
+                <Button type="primary" loading={toolDetail?.probeStatus === 'probing'} onClick={probeToolDetail}>
+                  {toolDetail?.probe_result ? '再次测试' : '测试接口'}
+                </Button>
+              </>
+            )}
           </Space>
         }
         width={760}
@@ -1697,11 +1716,16 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
       >
         {toolDetail && (
           <div className="tool-suggestion-detail">
+            <div><strong>解析状态：</strong>{toolSuggestionResolutionLabel(toolDetail)}</div>
+            {toolDetail.matched_tool_name && (
+              <div><strong>匹配工具：</strong>{toolDetail.matched_tool_display_name || toolDetail.matched_tool_name}</div>
+            )}
             <div><strong>工具名：</strong>{toolDetail.name}</div>
             <div><strong>显示名：</strong>{toolDetail.display_name || '-'}</div>
             <div><strong>说明：</strong>{toolDetail.description || '-'}</div>
             <div><strong>方法：</strong>{toolDetail.method}</div>
             <div><strong>URL：</strong>{toolDetail.url}</div>
+            {toolDetail.missing_reason && <div><strong>缺失原因：</strong>{toolDetail.missing_reason}</div>}
             <div><strong>原因：</strong>{toolDetail.reason || '-'}</div>
             <div><strong>来源：</strong>{toolDetail.source_excerpt || '-'}</div>
             <Typography.Text strong>样例参数</Typography.Text>
@@ -2593,6 +2617,11 @@ function normalizeToolSuggestions(value: unknown): ToolSuggestionItem[] {
       source_excerpt: typeof item.source_excerpt === 'string' ? item.source_excerpt : undefined,
       probe_result: isRecord(item.probe_result) ? item.probe_result as ToolProbeResponse : undefined,
       reason: typeof item.reason === 'string' ? item.reason : '',
+      resolution_status: toolSuggestionResolutionValue(item.resolution_status),
+      matched_tool_id: typeof item.matched_tool_id === 'string' ? item.matched_tool_id : undefined,
+      matched_tool_name: typeof item.matched_tool_name === 'string' ? item.matched_tool_name : undefined,
+      matched_tool_display_name: typeof item.matched_tool_display_name === 'string' ? item.matched_tool_display_name : undefined,
+      missing_reason: typeof item.missing_reason === 'string' ? item.missing_reason : undefined,
       status: 'pending' as const,
       probeStatus: isRecord(item.probe_result)
         ? Boolean(item.probe_result.success)
@@ -2601,6 +2630,29 @@ function normalizeToolSuggestions(value: unknown): ToolSuggestionItem[] {
         : 'idle' as const,
     }))
     .filter((item) => item.name);
+}
+
+function toolSuggestionResolutionValue(value: unknown): ToolSuggestion['resolution_status'] {
+  return value === 'existing' || value === 'incomplete' || value === 'new_candidate' ? value : 'new_candidate';
+}
+
+function toolSuggestionResolution(suggestion: ToolSuggestionItem): NonNullable<ToolSuggestion['resolution_status']> {
+  return suggestion.resolution_status || 'new_candidate';
+}
+
+function toolSuggestionTitle(suggestion: ToolSuggestionItem): string {
+  const label = suggestion.display_name || suggestion.name;
+  if (toolSuggestionResolution(suggestion) === 'existing') {
+    return `已匹配工具：${suggestion.matched_tool_display_name || label}`;
+  }
+  return `建议新增工具：${label}`;
+}
+
+function toolSuggestionResolutionLabel(suggestion: ToolSuggestionItem): string {
+  const status = toolSuggestionResolution(suggestion);
+  if (status === 'existing') return '已匹配现有工具';
+  if (status === 'incomplete') return '工具信息不足';
+  return '可新增候选';
 }
 
 function compactWarning(warning: string): string {
@@ -2613,7 +2665,7 @@ function compactWarning(warning: string): string {
       text.includes('tool_suggestions') ||
       text.includes('allowed_actions'))
   ) {
-    return `未配置工具 ${toolName}，需提供完整接口信息后新增。`;
+    return `未配置工具 ${toolName}，需在原文中提供完整接口信息后新增。`;
   }
   if (text.includes('没有任何工具支持') || (text.includes('available_tools') && text.includes('工具'))) {
     return '缺少可用工具，需先新增工具后再执行该流程。';

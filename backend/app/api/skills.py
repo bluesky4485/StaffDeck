@@ -404,7 +404,16 @@ def _with_available_tools(db: Session, request: SkillDistillRequest) -> SkillDis
     available_tools = [
         *request.available_tools,
         *[
-            {"name": tool.name, "description": tool.description, "input_schema": tool.input_schema}
+            {
+                "id": tool.id,
+                "name": tool.name,
+                "display_name": tool.display_name,
+                "description": tool.description,
+                "method": tool.method,
+                "url": tool.url,
+                "input_schema": tool.input_schema,
+                "output_schema": tool.output_schema,
+            }
             for tool in tools
         ],
     ]
@@ -418,7 +427,16 @@ def _with_available_tools_for_rewrite(db: Session, request: SkillRewriteRequest)
     available_tools = [
         *request.available_tools,
         *[
-            {"name": tool.name, "description": tool.description, "input_schema": tool.input_schema}
+            {
+                "id": tool.id,
+                "name": tool.name,
+                "display_name": tool.display_name,
+                "description": tool.description,
+                "method": tool.method,
+                "url": tool.url,
+                "input_schema": tool.input_schema,
+                "output_schema": tool.output_schema,
+            }
             for tool in tools
         ],
     ]

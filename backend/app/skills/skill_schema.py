@@ -41,6 +41,11 @@ class ToolSuggestion(BaseModel):
     source_excerpt: Optional[str] = None
     probe_result: Optional[dict[str, Any]] = None
     reason: str = ""
+    resolution_status: Literal["existing", "new_candidate", "incomplete"] = "new_candidate"
+    matched_tool_id: Optional[str] = None
+    matched_tool_name: Optional[str] = None
+    matched_tool_display_name: Optional[str] = None
+    missing_reason: Optional[str] = None
 
 
 class SkillCreateRequest(BaseModel):

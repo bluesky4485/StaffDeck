@@ -25,6 +25,11 @@ export type ToolSuggestion = {
   source_excerpt?: string;
   probe_result?: ToolProbeResponse;
   reason: string;
+  resolution_status?: 'existing' | 'new_candidate' | 'incomplete';
+  matched_tool_id?: string;
+  matched_tool_name?: string;
+  matched_tool_display_name?: string;
+  missing_reason?: string;
 };
 
 export type ToolProbeResponse = {

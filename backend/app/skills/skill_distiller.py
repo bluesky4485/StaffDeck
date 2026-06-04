@@ -146,14 +146,14 @@ class SkillDistiller:
                 "generation_instruction": (
                     "先生成完整但紧凑的 Skill Card 大纲。steps 必须覆盖原始流程全部步骤，"
                     "每个 instruction 只写一句目标说明；保留 response_rules、slot_filling_policy、"
-                    "interruption_policy 和 tool_suggestions。只输出 JSON。"
+                    "interruption_policy 和 tool_mentions。只输出 JSON。"
                 ),
             },
         )
         outline = self._response_from_text(outline_text, request)
         draft_data = outline.draft_skill.model_dump(mode="json")
         warnings = list(outline.warnings)
-        tool_suggestions = [item.model_dump(mode="json") for item in outline.tool_suggestions]
+        tool_mentions = [item.model_dump(mode="json") for item in outline.tool_suggestions]
         steps = [step for step in draft_data.get("steps", []) if isinstance(step, dict)]
 
         for index, step in enumerate(steps):
@@ -167,7 +167,7 @@ class SkillDistiller:
                     "target_step": step,
                     "generation_instruction": (
                         "只扩写 target_step。输出 JSON：{\"step\": {...}, \"warnings\": [], "
-                        "\"tool_suggestions\": []}。step 必须包含 step_id、name、instruction、"
+                        "\"tool_mentions\": []}。step 必须包含 step_id、name、instruction、"
                         "expected_user_info、allowed_actions。不要输出完整技能。"
                     ),
                 },
@@ -177,14 +177,14 @@ class SkillDistiller:
                 step_data = step_raw.get("step") if isinstance(step_raw.get("step"), dict) else step_raw
                 steps[index] = SkillStep.model_validate(step_data).model_dump(mode="json")
                 warnings.extend(str(item) for item in step_raw.get("warnings", []) if str(item).strip())
-                if isinstance(step_raw.get("tool_suggestions"), list):
-                    tool_suggestions.extend(item for item in step_raw["tool_suggestions"] if isinstance(item, dict))
+                if isinstance(step_raw.get("tool_mentions"), list):
+                    tool_mentions.extend(item for item in step_raw["tool_mentions"] if isinstance(item, dict))
             except (json.JSONDecodeError, TypeError, ValueError) as exc:
                 warnings.append(f"模型未能扩写步骤 {index + 1}，已保留大纲步骤：{exc}")
 
         draft_data["steps"] = steps
         reviewed = self._normalize_response(
-            {"draft_skill": draft_data, "warnings": warnings, "tool_suggestions": tool_suggestions},
+            {"draft_skill": draft_data, "warnings": warnings, "tool_mentions": tool_mentions},
             request,
         )
         review_text = client.generate_text(
@@ -227,7 +227,7 @@ class SkillDistiller:
         for tool_name in missing_tool_names:
             warnings.append(
                 f"技能草稿引用了未配置工具 {tool_name}，已移出 allowed_actions；"
-                "如确需该工具，模型必须在 tool_suggestions 中提供完整工具定义。"
+                "如确需该工具，模型必须在 tool_mentions 中提供来自原文的完整工具提及。"
             )
         response_rules = _string_list(draft.get("response_rules"), fallback.response_rules)
         if CLOSED_LOOP_RESPONSE_RULE not in response_rules:
@@ -260,7 +260,15 @@ class SkillDistiller:
         }
         draft_skill, card_warnings = skill_card_with_unique_step_ids(SkillCard.model_validate(normalized))
         warnings.extend(card_warnings)
-        tool_suggestions = _normalize_tool_suggestions(raw.get("tool_suggestions"), request, missing_tool_names)
+        tool_resolutions = _normalize_tool_suggestions(
+            raw.get("tool_mentions") if isinstance(raw.get("tool_mentions"), list) else raw.get("tool_suggestions"),
+            request,
+            missing_tool_names,
+        )
+        warnings.extend(_tool_resolution_warnings(tool_resolutions))
+        tool_suggestions = [
+            item for item in tool_resolutions if item.resolution_status in {"existing", "new_candidate"}
+        ]
         response = SkillDistillResponse(
             draft_skill=draft_skill,
             warnings=_compact_warnings(warnings),
@@ -482,9 +490,10 @@ def _compact_warning(warning: str) -> str:
         "未配置工具" in text
         or "available_tools" in text
         or "tool_suggestions" in text
+        or "tool_mentions" in text
         or "allowed_actions" in text
     ):
-        return f"未配置工具 {tool_name}，已移出调用动作；需由模型提供工具定义。"
+        return f"未配置工具 {tool_name}，已移出调用动作；需在原文中提供完整工具接口信息。"
     if "没有任何工具支持" in text or ("available_tools" in text and "工具" in text):
         return "缺少可用工具，需先新增工具后再执行该流程。"
     replacements = (
@@ -681,13 +690,13 @@ def _normalize_tool_suggestions(
     value: Any, request: Any, missing_tool_names: list[str]
 ) -> list[ToolSuggestion]:
     suggestions: list[ToolSuggestion] = []
-    seen = set(_available_tool_names(request.available_tools))
+    seen: set[str] = set()
 
     if isinstance(value, list):
         for item in value:
             if not isinstance(item, dict):
                 continue
-            suggestion = _tool_suggestion_from_dict(item, request)
+            suggestion = _tool_mention_to_resolution(item, request)
             if suggestion is None:
                 continue
             if suggestion.name in seen:
@@ -698,28 +707,120 @@ def _normalize_tool_suggestions(
     return suggestions
 
 
-def _tool_suggestion_from_dict(item: dict[str, Any], request: Any) -> ToolSuggestion | None:
-    name = _string(item.get("name"), "")
+def _tool_resolution_warnings(suggestions: list[ToolSuggestion]) -> list[str]:
+    warnings: list[str] = []
+    for suggestion in suggestions:
+        if suggestion.resolution_status != "incomplete":
+            continue
+        label = suggestion.display_name or suggestion.name
+        reason = suggestion.missing_reason or "缺少完整接口信息"
+        warnings.append(f"模型提到了可能的工具「{label}」，但当前不能新增：{reason}。")
+    return warnings
+
+
+def _tool_mention_to_resolution(item: dict[str, Any], request: Any) -> ToolSuggestion | None:
+    name = _string(item.get("name"), "") or _string(item.get("inferred_name"), "")
+    display_name = _string(item.get("display_name"), "") or _string(item.get("label"), "")
+    description = _string(item.get("description"), "") or _string(item.get("purpose"), "")
     url = _string(item.get("url"), "")
+    method = _tool_method(item.get("method"), "POST")
     input_schema = item.get("input_schema")
     output_schema = item.get("output_schema")
-    if not name or not url or not isinstance(input_schema, dict) or not isinstance(output_schema, dict):
+    source_excerpt = _string(item.get("source_excerpt"), "") or None
+    reason = _string(item.get("reason"), "") or _string(item.get("purpose"), "") or "模型从技能文档中抽取到该工具提及。"
+
+    matched_tool = _match_available_tool(name, url, request.available_tools)
+    if matched_tool is not None:
+        matched_name = _string(matched_tool.get("name"), name)
+        return ToolSuggestion(
+            name=matched_name,
+            display_name=_string(matched_tool.get("display_name"), display_name or matched_name),
+            description=_string(matched_tool.get("description"), description),
+            method=_tool_method(matched_tool.get("method"), method),
+            url=_string(matched_tool.get("url"), url),
+            input_schema=matched_tool.get("input_schema") if isinstance(matched_tool.get("input_schema"), dict) else {},
+            output_schema=matched_tool.get("output_schema") if isinstance(matched_tool.get("output_schema"), dict) else {},
+            sample_arguments=item.get("sample_arguments") if isinstance(item.get("sample_arguments"), dict) else {},
+            source_excerpt=source_excerpt,
+            probe_result=item.get("probe_result") if isinstance(item.get("probe_result"), dict) else None,
+            reason="已匹配到现有工具配置。",
+            resolution_status="existing",
+            matched_tool_id=_string(matched_tool.get("id"), "") or None,
+            matched_tool_name=matched_name,
+            matched_tool_display_name=_string(matched_tool.get("display_name"), "") or None,
+        )
+
+    if not name and not display_name and not url:
         return None
-    if not _tool_suggestion_url_in_source(url, request):
-        return None
+
+    missing_reasons = _tool_mention_missing_reasons(url, input_schema, output_schema, request)
+    if missing_reasons:
+        return ToolSuggestion(
+            name=name or _tool_name_from_url(url) or display_name or "incomplete_tool",
+            display_name=display_name or name or _tool_name_from_url(url) or "未完整配置的工具",
+            description=description,
+            method=method,
+            url=url if _tool_suggestion_url_in_source(url, request) else "",
+            input_schema=input_schema if isinstance(input_schema, dict) else {},
+            output_schema=output_schema if isinstance(output_schema, dict) else {},
+            sample_arguments=item.get("sample_arguments") if isinstance(item.get("sample_arguments"), dict) else {},
+            source_excerpt=source_excerpt,
+            probe_result=item.get("probe_result") if isinstance(item.get("probe_result"), dict) else None,
+            reason=reason,
+            resolution_status="incomplete",
+            missing_reason="；".join(missing_reasons),
+        )
+
     return ToolSuggestion(
-        name=name,
-        display_name=_string(item.get("display_name"), name),
-        description=_string(item.get("description"), ""),
-        method=_tool_method(item.get("method"), "POST"),
+        name=name or _tool_name_from_url(url),
+        display_name=display_name or name or _tool_name_from_url(url),
+        description=description,
+        method=method,
         url=url,
         input_schema=input_schema,
         output_schema=output_schema,
         sample_arguments=item.get("sample_arguments") if isinstance(item.get("sample_arguments"), dict) else {},
-        source_excerpt=_string(item.get("source_excerpt"), "") or None,
+        source_excerpt=source_excerpt,
         probe_result=item.get("probe_result") if isinstance(item.get("probe_result"), dict) else None,
-        reason=_string(item.get("reason"), "模型根据流程中的接口说明生成该工具草案。"),
+        reason=reason,
+        resolution_status="new_candidate",
     )
+
+
+def _tool_mention_missing_reasons(url: str, input_schema: Any, output_schema: Any, request: Any) -> list[str]:
+    reasons: list[str] = []
+    if not url:
+        reasons.append("缺少可访问接口地址或路径")
+    elif not _tool_suggestion_url_in_source(url, request):
+        reasons.append("接口地址未在技能原文或改写上下文中出现")
+    if not isinstance(input_schema, dict) or not input_schema:
+        reasons.append("缺少输入参数结构")
+    if not isinstance(output_schema, dict) or not output_schema:
+        reasons.append("缺少返回结果结构")
+    return reasons
+
+
+def _match_available_tool(name: str, url: str, available_tools: list[dict[str, Any]]) -> dict[str, Any] | None:
+    name_text = name.strip()
+    url_candidates = set(_tool_url_candidates(url))
+    for tool in available_tools:
+        if not isinstance(tool, dict):
+            continue
+        tool_name = _string(tool.get("name"), "")
+        if name_text and tool_name and name_text == tool_name:
+            return tool
+        tool_url = _string(tool.get("url"), "")
+        if tool_url and url_candidates.intersection(_tool_url_candidates(tool_url)):
+            return tool
+    return None
+
+
+def _tool_name_from_url(url: str) -> str:
+    candidates = _tool_url_candidates(url)
+    path = candidates[-1] if candidates else url
+    text = path.strip("/").replace("-", "_").replace("/", ".")
+    text = re.sub(r"[^A-Za-z0-9_.]+", "_", text).strip("._")
+    return text or "tool_candidate"
 
 
 def _tool_suggestion_url_in_source(url: str, request: Any) -> bool:
