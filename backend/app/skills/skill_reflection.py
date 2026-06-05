@@ -83,10 +83,8 @@ def reflect_skill_response_stream(
     reflection_history: list[dict[str, Any]] = []
 
     for round_index in range(1, MAX_REFLECTION_ROUNDS + 1):
-        yield _status_event(
-            f"正在反思技能结果（{round_index}/{MAX_REFLECTION_ROUNDS}）：一致性、闭环、工具和确认"
-        )
-        yield _status_event("反思 Rubric：来源一致性、闭环能力、自适应推进、工具依据、副作用确认、中断恢复")
+        yield _status_event(f"正在校验技能结果（{round_index}/{MAX_REFLECTION_ROUNDS}）")
+        yield _status_event("校验范围：来源一致性、闭环能力、自适应推进、工具依据、副作用确认、中断恢复")
         try:
             review = _model_review(
                 client,
@@ -104,11 +102,11 @@ def reflect_skill_response_stream(
                 },
             )
         except (LLMError, json.JSONDecodeError, TypeError, ValueError) as exc:
-            yield _status_event("反思失败，保留当前技能草稿")
+            yield _status_event("校验失败，保留当前技能草稿")
             return normalize_response(
                 {
                     "draft_skill": reviewed_skill.model_dump(mode="json"),
-                    "warnings": [*warnings, f"模型反思未能完成，已保留当前技能草稿：{exc}"],
+                    "warnings": [*warnings, f"模型校验未能完成，已保留当前技能草稿：{exc}"],
                     "tool_mentions": [item.model_dump(mode="json") for item in suggestions],
                 }
             )
@@ -121,13 +119,13 @@ def reflect_skill_response_stream(
         failed = _failed_rubrics(review)
         if failed:
             for item in failed[:4]:
-                yield _status_event(f"反思发现：{_rubric_label(item)} - {_finding_text(item)}")
+                yield _status_event(f"校验发现：{_rubric_label(item)} - {_finding_text(item)}")
         summary = str(review.get("summary") or "").strip()
         if summary:
-            yield _status_event(f"反思结论：{summary}")
+            yield _status_event(f"校验结论：{summary}")
 
         if bool(review.get("passed")):
-            yield _status_event("反思通过，技能草稿满足当前要求")
+            yield _status_event("校验通过，技能草稿满足当前要求")
             return normalize_response(
                 {
                     "draft_skill": reviewed_skill.model_dump(mode="json"),
@@ -141,13 +139,13 @@ def reflect_skill_response_stream(
 
         revised_skill = review.get("draft_skill")
         if not isinstance(revised_skill, dict):
-            yield _status_event("反思未通过，但模型未返回可修正草稿")
+            yield _status_event("校验未通过，但模型未返回可修正草稿")
             return normalize_response(
                 {
                     "draft_skill": reviewed_skill.model_dump(mode="json"),
                     "warnings": [
                         *warnings,
-                        "模型反思未通过，但未返回可修正 Skill Card，已保留当前草稿。",
+                        "模型校验未通过，但未返回可修正 Skill Card，已保留当前草稿。",
                     ],
                     "tool_mentions": [
                         *[item.model_dump(mode="json") for item in suggestions],
@@ -156,7 +154,7 @@ def reflect_skill_response_stream(
                 }
             )
 
-        yield _status_event(f"反思未通过，正在应用第 {round_index} 轮修正")
+        yield _status_event(f"校验未通过，正在应用第 {round_index} 轮修正")
         reviewed = normalize_response(
             {
                 "draft_skill": revised_skill,
@@ -171,11 +169,11 @@ def reflect_skill_response_stream(
         warnings = list(getattr(reviewed, "warnings", warnings))
         suggestions = list(getattr(reviewed, "tool_suggestions", suggestions))
 
-    yield _status_event("反思达到上限，保留最后一版技能草稿")
+    yield _status_event("校验达到上限，保留最后一版技能草稿")
     return normalize_response(
         {
             "draft_skill": reviewed_skill.model_dump(mode="json"),
-            "warnings": [*warnings, f"模型反思已达到 {MAX_REFLECTION_ROUNDS} 轮上限，保留最后一版技能草稿。"],
+            "warnings": [*warnings, f"模型校验已达到 {MAX_REFLECTION_ROUNDS} 轮上限，保留最后一版技能草稿。"],
             "tool_mentions": [item.model_dump(mode="json") for item in suggestions],
         }
     )

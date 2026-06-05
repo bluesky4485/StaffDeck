@@ -92,6 +92,7 @@ class SkillEditor:
                     changed_paths=[],
                     warnings=[f"模型未能完成局部改写：{repair_exc}"],
                 )
+        yield {"event": "status", "data": {"text": "正在校验改写范围与工具接入"}}
         response = yield from reflect_skill_response_stream(
             client=client,
             source_kind="rewrite",
@@ -102,6 +103,7 @@ class SkillEditor:
             tool_suggestions=response.tool_suggestions,
             normalize_response=lambda review_raw: self._normalize_response(review_raw, request),
         )
+        yield {"event": "status", "data": {"text": "正在整理校验后的改写结果"}}
         for chunk in _chunk_text(response.assistant_message):
             yield {"event": "message_chunk", "data": {"content": chunk}}
             sleep(STREAM_INTERVAL_SECONDS)

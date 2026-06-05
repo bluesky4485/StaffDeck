@@ -75,6 +75,7 @@ class SkillDistiller:
             for chunk in _chunk_text(_serialize_response_for_stream(response)):
                 yield {"event": "chunk", "data": {"content": chunk}}
                 sleep(STREAM_INTERVAL_SECONDS)
+        yield {"event": "status", "data": {"text": "正在校验步骤闭环与工具接入"}}
         before_reflection = response.model_dump(mode="json")
         response = yield from reflect_skill_response_stream(
             client=client,
@@ -86,12 +87,13 @@ class SkillDistiller:
             tool_suggestions=response.tool_suggestions,
             normalize_response=lambda raw: self._normalize_response(raw, request),
         )
+        yield {"event": "status", "data": {"text": "正在整理校验后的技能草稿"}}
         if response.model_dump(mode="json") != before_reflection:
             yield {"event": "chunk_reset", "data": {}}
             for chunk in _chunk_text(_serialize_response_for_stream(response)):
                 yield {"event": "chunk", "data": {"content": chunk}}
                 sleep(STREAM_INTERVAL_SECONDS)
-        yield {"event": "status", "data": {"text": "已完成 Skill Card 结构化"}}
+        yield {"event": "status", "data": {"text": "校验完成，已完成 Skill Card 结构化"}}
         yield {"event": "complete", "data": response.model_dump(mode="json")}
 
     def _generate_response(self, request: SkillDistillRequest, model_config: ModelConfig) -> SkillDistillResponse:

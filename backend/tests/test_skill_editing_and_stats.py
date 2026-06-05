@@ -288,6 +288,9 @@ def test_skill_editor_stream_repairs_invalid_json_once(monkeypatch) -> None:
     complete = next(event for event in events if event["event"] == "complete")
 
     assert "模型输出需要修复，正在重试一次" in status_texts
+    assert "正在校验改写范围与工具接入" in status_texts
+    assert any(text.startswith("正在校验技能结果") for text in status_texts)
+    assert "正在整理校验后的改写结果" in status_texts
     assert complete["data"]["draft_skill"]["response_rules"] == [
         "信息不足时追问；工具成功后给出明确结果，不编造事实。"
     ]
@@ -912,8 +915,10 @@ def test_skill_distiller_stream_uses_generation_status(monkeypatch) -> None:
     assert "正在改写技能" not in status_texts
     assert "模型正在规划技能结构" in status_texts
     assert "正在校验模型输出结构" in status_texts
-    assert any(text.startswith("正在反思技能结果") for text in status_texts)
-    assert "已完成 Skill Card 结构化" in status_texts
+    assert "正在校验步骤闭环与工具接入" in status_texts
+    assert any(text.startswith("正在校验技能结果") for text in status_texts)
+    assert "正在整理校验后的技能草稿" in status_texts
+    assert "校验完成，已完成 Skill Card 结构化" in status_texts
 
 
 def test_skill_distiller_stream_reflects_and_repairs_generated_skill(monkeypatch) -> None:
@@ -1002,9 +1007,9 @@ def test_skill_distiller_stream_reflects_and_repairs_generated_skill(monkeypatch
     status_texts = [event["data"]["text"] for event in events if event["event"] == "status"]
     complete = next(event for event in events if event["event"] == "complete")
 
-    assert any("反思发现：闭环能力" in text for text in status_texts)
-    assert any("反思未通过，正在应用第 1 轮修正" in text for text in status_texts)
-    assert any("反思通过" in text for text in status_texts)
+    assert any("校验发现：闭环能力" in text for text in status_texts)
+    assert any("校验未通过，正在应用第 1 轮修正" in text for text in status_texts)
+    assert any("校验通过" in text for text in status_texts)
     assert any(event["event"] == "chunk_reset" for event in events)
     assert [step["step_id"] for step in complete["data"]["draft_skill"]["steps"]][-1] == "reply_result"
 
