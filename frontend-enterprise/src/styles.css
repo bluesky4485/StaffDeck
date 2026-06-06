@@ -813,6 +813,11 @@ body.skill-distill-fixed .content {
   border-radius: 0;
 }
 
+.skill-chat-row.user .skill-chat-bubble.has-attachments .skill-chat-attachments {
+  margin-bottom: 0;
+  justify-items: end;
+}
+
 .skill-chat-row.user .skill-chat-bubble.has-attachments .skill-chat-content {
   max-width: 100%;
   padding: 13px 15px;
@@ -876,7 +881,7 @@ body.skill-distill-fixed .content {
   opacity: 0.45;
 }
 
-.skill-chat-row.user .skill-chat-bubble.editing {
+.skill-chat-row.user .skill-chat-bubble.editing:not(.has-attachments) {
   min-width: min(360px, 72vw);
   max-width: 84%;
   padding: 12px 14px;
@@ -885,9 +890,25 @@ body.skill-distill-fixed .content {
   border-radius: 16px;
 }
 
+.skill-chat-row.user .skill-chat-bubble.has-attachments.editing {
+  min-width: min(520px, 100%);
+  max-width: min(620px, 74%);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
 .skill-chat-edit-panel {
   display: grid;
   gap: 10px;
+}
+
+.skill-chat-row.user .skill-chat-bubble.has-attachments.editing .skill-chat-edit-panel {
+  width: min(520px, 100%);
+  padding: 12px 14px;
+  background: #f0eee9;
+  border-radius: 16px;
 }
 
 .skill-chat-edit-panel .ant-input {
@@ -1999,6 +2020,15 @@ code {
   .skill-chat-row.user .skill-chat-bubble,
   .skill-chat-row.user .skill-chat-bubble.editing {
     max-width: 100%;
+  }
+
+  .skill-chat-row.user .skill-chat-bubble.has-attachments.editing {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .skill-chat-row.user .skill-chat-bubble.has-attachments.editing .skill-chat-edit-panel {
+    width: 100%;
   }
 
   .skill-chat-hover-actions {

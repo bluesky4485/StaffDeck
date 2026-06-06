@@ -1408,11 +1408,11 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
 
   function requestEditHistoryMessage(item: ChatItem, index: number) {
     if (loading || item.role !== 'user') return;
-    setEditingMessage({ id: item.id, text: item.outgoingText || item.content });
+    setEditingMessage({ id: item.id, text: visibleChatContent(item) });
   }
 
   async function copyHistoryMessage(item: ChatItem) {
-    const text = item.outgoingText || item.content;
+    const text = visibleChatContent(item);
     try {
       await navigator.clipboard.writeText(text);
       message.success('已复制');
@@ -1435,15 +1435,16 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
       setEditingMessage(null);
       return;
     }
+    const outgoingText = buildEditedOutgoingText(item, text);
     const snapshot = item.snapshotBefore;
     if (!snapshot) {
-      updateMessage(item.id, text, { outgoingText: text });
+      updateMessage(item.id, text, { outgoingText });
       setEditingMessage(null);
       return;
     }
     const rollbackOperations = collectRollbackOperations(messages.slice(index + 1));
     if (rollbackOperations.length === 0) {
-      void rerunEditedMessage(index, snapshot, rollbackOperations, text);
+      void rerunEditedMessage(index, snapshot, rollbackOperations, text, outgoingText);
       return;
     }
     Modal.confirm({
@@ -1463,7 +1464,7 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
       okText: '确认回退',
       cancelText: '取消',
       onOk: () => {
-        void rerunEditedMessage(index, snapshot, rollbackOperations, text);
+        void rerunEditedMessage(index, snapshot, rollbackOperations, text, outgoingText);
       },
     });
   }
@@ -1472,7 +1473,8 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
     index: number,
     snapshot: DistillHistorySnapshot,
     operations: DistillHistoryOperation[],
-    text: string,
+    displayText: string,
+    outgoingText: string,
   ) {
     try {
       await rollbackPersistedOperations(snapshot, operations);
@@ -1487,8 +1489,8 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
       const editedUser: ChatItem = {
         id: `user_${Date.now()}_${Math.random().toString(16).slice(2)}`,
         role: 'user',
-        content: text,
-        outgoingText: text,
+        content: displayText,
+        outgoingText,
         createdAt: new Date().toISOString(),
         snapshotBefore: snapshot,
       };
@@ -1497,10 +1499,10 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
       setMessages(nextMessages);
       setEditingMessage(null);
       if (!confirmedDraft) {
-        await createDraftFromText(text);
+        await createDraftFromText(outgoingText);
         return;
       }
-      await rewriteSelectedTarget(text, confirmedDraft, undefined, undefined, nextMessages);
+      await rewriteSelectedTarget(outgoingText, confirmedDraft, undefined, undefined, nextMessages);
     } catch (error) {
       message.error(error instanceof Error ? error.message : '回退失败');
     }
@@ -1643,6 +1645,21 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
                         )}
                       </div>
                     )}
+                    {item.role === 'user' && item.attachments && item.attachments.length > 0 && (
+                      <div className="skill-chat-attachments">
+                        {item.attachments.map((attachment) => (
+                          <div className="skill-chat-attachment" key={attachment.id} title={attachment.name}>
+                            <span className="skill-chat-attachment-icon">
+                              <FileTextOutlined />
+                            </span>
+                            <span className="skill-chat-attachment-main">
+                              <span className="skill-chat-attachment-name">{attachment.name}</span>
+                              <span className="skill-chat-attachment-type">{attachment.type}</span>
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     {item.role === 'user' && editingMessage?.id === item.id ? (
                       <div className="skill-chat-edit-panel">
                         <Input.TextArea
@@ -1666,23 +1683,8 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
                       </div>
                     ) : (
                       <>
-                        {item.attachments && item.attachments.length > 0 && (
-                          <div className="skill-chat-attachments">
-                            {item.attachments.map((attachment) => (
-                              <div className="skill-chat-attachment" key={attachment.id} title={attachment.name}>
-                                <span className="skill-chat-attachment-icon">
-                                  <FileTextOutlined />
-                                </span>
-                                <span className="skill-chat-attachment-main">
-                                  <span className="skill-chat-attachment-name">{attachment.name}</span>
-                                  <span className="skill-chat-attachment-type">{attachment.type}</span>
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                         {item.content ? (
-                          <div className="skill-chat-content">{item.content}</div>
+                          <div className="skill-chat-content">{visibleChatContent(item)}</div>
                         ) : item.role === 'assistant' && item.thinking === 'running' ? null : item.role === 'assistant' ? (
                           '正在处理...'
                         ) : null}
@@ -2888,6 +2890,8 @@ function filenameTitle(filename: string): string {
   return filename.replace(/\.[^.]+$/, '').trim() || '新技能';
 }
 
+const uploadContentMarker = '上传文档内容：';
+
 function buildOutgoingText(input: string, attachments: UploadAttachment[]): string {
   const text = input.trim();
   const attachmentText = attachments
@@ -2895,6 +2899,24 @@ function buildOutgoingText(input: string, attachments: UploadAttachment[]): stri
     .map((item) => `文件：${item.name}\n${item.text?.trim() || ''}`)
     .join('\n\n');
   return [text, attachmentText ? `上传文档内容：\n${attachmentText}` : ''].filter(Boolean).join('\n\n');
+}
+
+function visibleChatContent(item: ChatItem): string {
+  if (item.role !== 'user') return item.content;
+  return stripUploadContent(item.content || item.outgoingText || '');
+}
+
+function buildEditedOutgoingText(item: ChatItem, displayText: string): string {
+  const source = item.outgoingText || item.content;
+  const markerIndex = source.indexOf(uploadContentMarker);
+  if (markerIndex < 0) return displayText.trim();
+  const uploadContent = source.slice(markerIndex).trim();
+  return [displayText.trim(), uploadContent].filter(Boolean).join('\n\n');
+}
+
+function stripUploadContent(text: string): string {
+  const markerIndex = text.indexOf(uploadContentMarker);
+  return (markerIndex >= 0 ? text.slice(0, markerIndex) : text).trim();
 }
 
 function buildDisplayAttachments(attachments: UploadAttachment[]): ChatAttachment[] {
