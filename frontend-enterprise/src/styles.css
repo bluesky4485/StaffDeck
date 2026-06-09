@@ -2855,6 +2855,30 @@ pre {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 10px 28px rgba(0, 0, 0, 0.2);
 }
 
+:root[data-theme='dark'] .skill-chat-attachment,
+:root[data-theme='dark'] .skill-chat-row.user .skill-chat-attachment {
+  color: rgba(248, 250, 252, 0.94);
+  background:
+    linear-gradient(180deg, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.96)),
+    var(--surface);
+  border-color: rgba(226, 232, 240, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 10px 24px rgba(0, 0, 0, 0.22);
+}
+
+:root[data-theme='dark'] .skill-chat-attachment-icon {
+  color: #fff7ed;
+  background: linear-gradient(145deg, #dc2626, #ef4444);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 6px 16px rgba(220, 38, 38, 0.28);
+}
+
+:root[data-theme='dark'] .skill-chat-attachment-name {
+  color: rgba(248, 250, 252, 0.96);
+}
+
+:root[data-theme='dark'] .skill-chat-attachment-type {
+  color: rgba(203, 213, 225, 0.72);
+}
+
 :root[data-theme='dark'] .skill-chat-thinking-details,
 :root[data-theme='dark'] .skill-chat-warning,
 :root[data-theme='dark'] .general-trace-list,
@@ -2903,9 +2927,156 @@ pre {
   border-color: rgba(228, 185, 118, 0.32) !important;
 }
 
+:root[data-theme='dark'] .skill-tool-suggestion {
+  color: rgba(248, 250, 252, 0.92);
+  background:
+    linear-gradient(180deg, rgba(20, 28, 43, 0.96), rgba(12, 18, 30, 0.98)),
+    var(--surface) !important;
+  border-color: rgba(226, 232, 240, 0.16) !important;
+}
+
+:root[data-theme='dark'] .skill-tool-suggestion-title {
+  color: rgba(248, 250, 252, 0.96);
+}
+
+:root[data-theme='dark'] .skill-tool-suggestion-desc {
+  color: rgba(203, 213, 225, 0.76);
+}
+
+:root[data-theme='dark'] .skill-tool-suggestion-meta {
+  color: rgba(203, 213, 225, 0.64);
+}
+
+:root[data-theme='dark'] .skill-tool-suggestion-meta > span:not(.skill-tool-method) {
+  color: rgba(203, 213, 225, 0.66);
+}
+
+:root[data-theme='dark'] .skill-tool-method {
+  color: rgba(248, 250, 252, 0.92);
+  background: rgba(248, 250, 252, 0.075);
+  border-color: rgba(226, 232, 240, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+:root[data-theme='dark'] .skill-tool-status {
+  color: rgba(203, 213, 225, 0.78);
+  background: rgba(148, 163, 184, 0.11);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+:root[data-theme='dark'] .skill-tool-status.success {
+  color: #86efac;
+  background: rgba(16, 185, 129, 0.13);
+  border-color: rgba(134, 239, 172, 0.28);
+}
+
+:root[data-theme='dark'] .skill-tool-status.error {
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(252, 165, 165, 0.25);
+}
+
+:root[data-theme='dark'] .skill-tool-status.running,
+:root[data-theme='dark'] .skill-tool-status.pending {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(253, 230, 138, 0.24);
+}
+
 :root[data-theme='dark'] .skill-tool-action-group {
-  background: rgba(30, 41, 59, 0.94);
-  border-color: var(--border);
+  background: rgba(8, 13, 24, 0.76);
+  border-color: rgba(226, 232, 240, 0.16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+:root[data-theme='dark'] .skill-tool-action.ant-btn {
+  color: rgba(203, 213, 225, 0.82);
+}
+
+:root[data-theme='dark'] .skill-tool-action.ant-btn:hover {
+  color: rgba(248, 250, 252, 0.96);
+  background: rgba(248, 250, 252, 0.09);
+}
+
+:root[data-theme='dark'] .skill-tool-action.confirm.ant-btn {
+  color: #86efac;
+}
+
+:root[data-theme='dark'] .skill-tool-action.confirm.ant-btn:hover {
+  color: #bbf7d0;
+  background: rgba(16, 185, 129, 0.15);
+}
+
+:root[data-theme='dark'] .skill-tool-action.reject.ant-btn {
+  color: #fca5a5;
+}
+
+:root[data-theme='dark'] .skill-tool-action.reject.ant-btn:hover {
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.14);
+}
+
+:root[data-theme='dark'] .skill-flow-chip,
+:root[data-theme='dark'] .skill-action-chip,
+:root[data-theme='dark'] .skill-source-action-add {
+  color: rgba(203, 213, 225, 0.78);
+  background: rgba(248, 250, 252, 0.055);
+  border-color: rgba(226, 232, 240, 0.16);
+}
+
+:root[data-theme='dark'] .skill-action-chip.tool {
+  color: #99f6e4;
+  background: rgba(20, 184, 166, 0.12);
+  border-color: rgba(153, 246, 228, 0.28);
+}
+
+:root[data-theme='dark'] .skill-action-chip.tool.existing,
+:root[data-theme='dark'] .skill-action-chip.tool.accepted,
+:root[data-theme='dark'] .skill-action-chip.tool.created {
+  color: #86efac;
+  background: rgba(16, 185, 129, 0.13);
+  border-color: rgba(134, 239, 172, 0.3);
+}
+
+:root[data-theme='dark'] .skill-action-chip.tool.pending {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(253, 230, 138, 0.25);
+}
+
+:root[data-theme='dark'] .skill-action-chip.tool.rejected,
+:root[data-theme='dark'] .skill-action-chip.removed {
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(252, 165, 165, 0.24);
+}
+
+:root[data-theme='dark'] .skill-action-chip.tool.incomplete {
+  color: rgba(203, 213, 225, 0.74);
+  background: rgba(148, 163, 184, 0.11);
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+:root[data-theme='dark'] .skill-action-chip.added {
+  color: #bbf7d0;
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(134, 239, 172, 0.3);
+}
+
+:root[data-theme='dark'] .skill-action-chip.added.settled {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+:root[data-theme='dark'] .skill-source-action-editor:hover,
+:root[data-theme='dark'] .skill-source-action-editor:focus-visible {
+  background: rgba(248, 250, 252, 0.055);
+  border-color: rgba(226, 232, 240, 0.16);
+}
+
+:root[data-theme='dark'] .skill-source-action-input.ant-input {
+  color: rgba(248, 250, 252, 0.94);
+  background: rgba(15, 23, 42, 0.95) !important;
+  border-color: rgba(226, 232, 240, 0.2) !important;
 }
 
 :root[data-theme='dark'] .brand-mark {
