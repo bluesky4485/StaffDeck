@@ -35,20 +35,21 @@ clarify 只表示“当前还无法判断应该使用哪个技能或是否使用
 判断原则：
 1. 如果用户问题和当前技能当前步骤一致，选择 continue_current_skill。
 2. 如果用户问题仍属于当前技能，但跳到了其他步骤，选择 jump_within_current_skill。
-3. 如果用户临时问了当前技能相关问题，选择 answer_related_question_then_resume；运行时会把当前任务保存成 paused frame，后续是否恢复由 Router 根据用户消息决定。
+3. 如果用户临时问了当前技能相关问题，且该问题可以仅凭当前会话、memory 或 active_skill 中的静态说明可靠回答，选择 answer_related_question_then_resume；运行时会把当前任务保存成 paused frame，后续是否恢复由 Router 根据用户消息决定。
 4. 如果用户切换到另一个业务诉求，选择 suspend_current_and_start_new_skill 或 start_new_task。
 5. 如果用户只是闲聊，选择 answer_only 或 answer_chitchat_then_resume。
 6. 如果用户意图不清楚、无法匹配任何技能，或多个技能都可能且缺少区分信息，选择 clarify；不要用 clarify 表示“技能明确但缺槽位”。
 7. 如果用户要求人工，选择 handoff_human。
 8. 判断只能基于 current_session 与 available_skills 的名称、描述、trigger_intents、步骤；不要依赖平台内置业务假设。
 9. 如果用户当前回答只是补充当前步骤缺失信息，尤其是很短、明显在回答上一轮问题的内容，应优先选择 continue_current_skill。
-10. 如果用户一句话同时补充当前步骤信息，并明确提出临时咨询、前置查询、比较、核实、取消、售后等另一个可由技能处理的诉求，不要让原则9吞掉复合意图；如果该诉求回答后应回到原流程，选择 answer_related_question_then_resume；如果是独立新业务，选择 suspend_current_and_start_new_skill。
-11. 临时咨询如果需要企业数据、实时数据、外部事实、工具结果或另一个技能才能可靠回答，不得降级成普通话术回答；应优先选择能执行该诉求的技能任务，或保留/继续当前技能并让执行阶段只基于已知信息行动。不得让模型在无工具结果、无会话证据、无记忆证据时编造价格、订单、库存、天气、权益等事实。
-12. 如果用户一句话包含“先完成当前技能/当前确认，再执行另一个技能”的顺序任务，例如“确认，完成后再做另一个事”，主 decision 必须优先处理当前技能当前步骤，通常选择 continue_active；把后续独立技能放入 pending_tasks 或 created_tasks。不要用 suspend_current_and_start_new_skill 把当前尚未完成的技能挂起。
-13. pending_tasks / created_tasks 只用于尚未执行的后续任务。每个任务必须来自 available_skills，不要编造技能；target_step_id 应指向该技能可开始处理该诉求的步骤。
-14. 每轮都要先检查 current_session.pending_tasks 和 current_session.skill_stack。如果用户当前消息是在继续其中某个任务，选择 switch_to_pending，并填写 selected_task_id。不要只根据 target_skill_id 自动合并任务。
-15. 如果 pending 为空，不能选择 switch_to_pending，但仍可继续 active 或启动新技能。
-16. 如果用户重复表达已在 pending 中的同一任务，优先输出 task_updates 更新原 task，不要新增重复 pending。
+10. 如果用户一句话同时补充当前步骤信息，并明确提出临时咨询、前置查询、比较、核实、取消、售后等另一个可由技能处理的诉求，不要让原则9吞掉复合意图；如果该诉求可以由当前上下文可靠回答且回答后应回到原流程，选择 answer_related_question_then_resume；如果该诉求需要独立执行技能或工具，选择 start_new_task / suspend_current_and_start_new_skill，或把后续顺序任务写入 created_tasks / pending_tasks。
+11. 临时咨询如果需要企业数据、实时数据、外部事实、工具结果或另一个技能才能可靠回答，不得降级成普通话术回答，也不得把事实性答案写进 clarification_question；应优先选择能执行该诉求的技能任务，或保留/继续当前技能并让执行阶段只基于已知信息行动。不得让模型在无工具结果、无会话证据、无记忆证据时编造价格、订单、库存、天气、权益等事实。
+12. `allowed_actions` 是执行模型在已选中 skill/step 下的动作约束，不是 Router 或后端自动调用工具的命令。Router 不能假设另一个 skill/step 的工具会在当前 active step 中自动可用；如果用户诉求需要那个工具所在的 skill/step，必须显式路由到对应任务。
+13. 如果用户一句话包含“先完成当前技能/当前确认，再执行另一个技能”的顺序任务，例如“确认，完成后再做另一个事”，主 decision 必须优先处理当前技能当前步骤，通常选择 continue_active；把后续独立技能放入 pending_tasks 或 created_tasks。不要用 suspend_current_and_start_new_skill 把当前尚未完成的技能挂起。
+14. pending_tasks / created_tasks 只用于尚未执行的后续任务。每个任务必须来自 available_skills，不要编造技能；target_step_id 应指向该技能可开始处理该诉求的步骤。
+15. 每轮都要先检查 current_session.pending_tasks 和 current_session.skill_stack。如果用户当前消息是在继续其中某个任务，选择 switch_to_pending，并填写 selected_task_id。不要只根据 target_skill_id 自动合并任务。
+16. 如果 pending 为空，不能选择 switch_to_pending，但仍可继续 active 或启动新技能。
+17. 如果用户重复表达已在 pending 中的同一任务，优先输出 task_updates 更新原 task，不要新增重复 pending。
 
 输出格式：
 {
