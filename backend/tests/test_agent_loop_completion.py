@@ -143,6 +143,55 @@ def test_compound_turn_seeds_primary_and_created_tasks_for_scheduler() -> None:
     assert session.pending_tasks_json[1]["slots"] == {"product_name_1": "A1", "product_name_2": "A3"}
 
 
+def test_start_new_task_preserves_existing_active_frame_for_scheduler() -> None:
+    loop = object.__new__(AgentLoop)
+    loop.runtime = SkillRuntime()
+    session = ChatSession(
+        id="session_test",
+        tenant_id="tenant_demo",
+        active_skill_id="purchase",
+        active_step_id="collect_user_name",
+        slots_json={"user_name": "hm"},
+    )
+    router_decision = RouterDecision(
+        decision="start_new_task",
+        target_skill_id="price_compare",
+        target_step_id="collect_products",
+        confidence=0.95,
+        user_intent="比较 A1 和 A3 的价格",
+        reason="用户提出独立比价任务。",
+        source_message="我想买一个A1,然后想跟A3比下价格",
+        slot_hints={"product_name_1": "A1", "product_name_2": "A3"},
+    )
+
+    queue_decision = loop._initial_scheduler_queue_decision(
+        _request("我想买一个A1,然后想跟A3比下价格"),
+        session,
+        router_decision,
+    )
+
+    assert queue_decision is not None
+    assert queue_decision.decision == "create_pending"
+    assert len(queue_decision.pending_tasks) == 2
+    primary, preserved = queue_decision.pending_tasks
+    assert primary.target_skill_id == "price_compare"
+    assert primary.slot_hints == {"product_name_1": "A1", "product_name_2": "A3"}
+    assert preserved.target_skill_id == "purchase"
+    assert preserved.target_step_id == "collect_user_name"
+    assert preserved.source_message == "我想买一个A1,然后想跟A3比下价格"
+    assert preserved.slot_hints == {"user_name": "hm"}
+
+    loop.runtime.apply_decision(session, queue_decision)
+    loop._release_active_task_to_scheduler(session, queue_decision)
+
+    assert session.active_skill_id is None
+    assert session.active_step_id is None
+    assert [frame["skill_id"] for frame in session.pending_tasks_json] == ["price_compare", "purchase"]
+    assert session.pending_tasks_json[0]["slots"] == {"product_name_1": "A1", "product_name_2": "A3"}
+    assert session.pending_tasks_json[1]["slots"] == {"user_name": "hm"}
+    assert session.pending_tasks_json[1]["source_message"] == "我想买一个A1,然后想跟A3比下价格"
+
+
 def test_finalize_turn_clears_stale_last_question_for_non_question_reply() -> None:
     loop = object.__new__(AgentLoop)
     loop.db = FakeDb()

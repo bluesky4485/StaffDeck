@@ -53,6 +53,7 @@ clarify 只表示“用户明显想办理企业流程，但当前还无法判断
 18. 如果用户重复表达已在 pending 中的同一任务，优先输出 task_updates 更新原 task，不要新增重复 pending。
 19. 如果用户一句话包含多个独立可执行任务，必须把每个任务都显式表达出来：主 decision 表达当前应推进的任务，其他任务写入 pending_tasks / created_tasks。运行时会先把这些任务都写成 task frame，再由 scheduler 决定执行顺序；不要把多个独立任务压缩成一个 target_skill_id。
 20. 如果本轮没有一个任务天然应先执行，也可以输出 create_pending，并把所有任务写入 pending_tasks / created_tasks，让 scheduler 选择先后顺序。
+21. 当 current_session.active_skill_id 存在，而你准备选择另一个 target_skill_id 时，必须先判断当前用户消息是否同时补充、确认、推进或修改了 active skill。只要存在这种可能，就不要让 start_new_task 隐式覆盖 active skill；应把 active skill 作为一个待调度任务保留，并把新任务也显式写入 pending_tasks / created_tasks，或选择 continue_active 并把新任务写入 created_tasks。只有用户明确取消、放弃或当前任务已完成时，才可以不保留 active skill。
 
 输出格式：
 {

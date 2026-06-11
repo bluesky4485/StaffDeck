@@ -1538,6 +1538,9 @@ class AgentLoop:
         if router_decision.decision == "switch_to_pending" and router_decision.selected_task_id:
             existing_selected_count = 1 if self._find_task_frame(chat_session, router_decision.selected_task_id) else 0
         primary_task = self._primary_task_from_router_decision(request, chat_session, router_decision)
+        active_task = self._active_task_for_scheduler(request, chat_session, router_decision, primary_task)
+        if active_task:
+            tasks = [active_task, *tasks]
         if primary_task:
             tasks = [primary_task, *tasks]
         if len(tasks) + existing_selected_count < 2:
@@ -1553,6 +1556,45 @@ class AgentLoop:
             source_message=router_decision.source_message or request.message,
             pending_tasks=tasks,
             task_updates=router_decision.task_updates,
+        )
+
+    def _active_task_for_scheduler(
+        self,
+        request: ChatTurnRequest,
+        chat_session: ChatSession,
+        router_decision: RouterDecision,
+        primary_task: PendingTask | None,
+    ) -> PendingTask | None:
+        if not chat_session.active_skill_id or not primary_task:
+            return None
+        if primary_task.target_skill_id == chat_session.active_skill_id:
+            return None
+        if router_decision.decision not in {"start_skill", "start_new_task"}:
+            return None
+        active_task_id = None
+        if isinstance(chat_session.awaiting_input_json, dict):
+            raw_task_id = chat_session.awaiting_input_json.get("task_id")
+            active_task_id = str(raw_task_id) if raw_task_id else None
+        if active_task_id:
+            for update in router_decision.task_updates:
+                if update.task_id == active_task_id and (
+                    update.remove or update.status in {"removed", "completed", "cancelled"}
+                ):
+                    return None
+        return PendingTask(
+            task_id=active_task_id or new_id("task"),
+            status="pending",
+            decision="continue_active",
+            target_skill_id=chat_session.active_skill_id,
+            target_step_id=chat_session.active_step_id,
+            confidence=router_decision.confidence,
+            user_intent="继续当前未完成任务，并从本轮用户消息中提取与该任务相关的信息。",
+            reason=(
+                "Router 在已有 active task 时选择了另一个新任务；"
+                "保留当前 active task 给 scheduler，由 scheduler 决定本轮是否以及何时继续。"
+            ),
+            source_message=request.message,
+            slot_hints=dict(chat_session.slots_json or {}),
         )
 
     def _release_active_task_to_scheduler(
