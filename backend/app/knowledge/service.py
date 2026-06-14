@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,7 @@ SEARCH_PROMPT = PROMPT_DIR / "knowledge_search_prompt.md"
 
 CHUNK_CHARS = 1800
 BUCKET_SECTION_CHARS = 6000
+PARAGRAPH_GROUP_CHARS = 4200
 
 
 @dataclass
@@ -546,29 +548,50 @@ def _normalize_text(text: str) -> str:
 
 
 def _split_sections(text: str) -> list[str]:
-    raw_sections: list[str] = []
-    current: list[str] = []
-    for line in text.split("\n"):
-        is_heading = line.lstrip().startswith("#") or (
-            len(line.strip()) <= 40 and line.strip().endswith(("：", ":"))
-        )
-        if is_heading and current:
-            raw_sections.append("\n".join(current).strip())
-            current = [line]
-        else:
-            current.append(line)
-    if current:
-        raw_sections.append("\n".join(current).strip())
+    paragraphs = _paragraph_blocks(text)
+    if not paragraphs:
+        return [text[:BUCKET_SECTION_CHARS]]
+
     sections: list[str] = []
-    for section in raw_sections:
-        if len(section) <= BUCKET_SECTION_CHARS:
-            sections.append(section)
-        else:
-            sections.extend(_chunk_text(section, BUCKET_SECTION_CHARS))
+    current: list[str] = []
+    current_len = 0
+
+    for paragraph in paragraphs:
+        parts = _split_large_paragraph(paragraph, BUCKET_SECTION_CHARS)
+        for part in parts:
+            is_heading = _looks_like_heading(part)
+            projected = current_len + len(part) + (2 if current else 0)
+            if current and (is_heading or projected > PARAGRAPH_GROUP_CHARS):
+                sections.append("\n\n".join(current).strip())
+                current = []
+                current_len = 0
+            current.append(part)
+            current_len += len(part) + (2 if current_len else 0)
+
+    if current:
+        sections.append("\n\n".join(current).strip())
     return [section for section in sections if section.strip()] or [text[:BUCKET_SECTION_CHARS]]
 
 
 def _chunk_text(text: str, max_chars: int) -> list[str]:
+    paragraphs = _paragraph_blocks(text)
+    if paragraphs:
+        chunks: list[str] = []
+        current: list[str] = []
+        current_len = 0
+        for paragraph in paragraphs:
+            for part in _split_large_paragraph(paragraph, max_chars):
+                projected = current_len + len(part) + (2 if current else 0)
+                if current and projected > max_chars:
+                    chunks.append("\n\n".join(current).strip())
+                    current = []
+                    current_len = 0
+                current.append(part)
+                current_len += len(part) + (2 if current_len else 0)
+        if current:
+            chunks.append("\n\n".join(current).strip())
+        return [chunk for chunk in chunks if chunk.strip()]
+
     chunks: list[str] = []
     cursor = 0
     while cursor < len(text):
@@ -582,6 +605,57 @@ def _chunk_text(text: str, max_chars: int) -> list[str]:
             chunks.append(chunk)
         cursor = max(end, cursor + 1)
     return chunks or [text.strip()]
+
+
+def _paragraph_blocks(text: str) -> list[str]:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return []
+    blocks = [block.strip() for block in re.split(r"\n\s*\n+", normalized) if block.strip()]
+    if len(blocks) > 1:
+        return blocks
+    # Plain exported documents often lose blank lines. Fall back to single lines
+    # so long documents still get incremental discovery instead of one huge block.
+    return [line.strip() for line in normalized.splitlines() if line.strip()]
+
+
+def _looks_like_heading(text: str) -> bool:
+    stripped = text.strip()
+    return stripped.startswith("#") or (
+        len(stripped) <= 48 and stripped.endswith(("：", ":"))
+    )
+
+
+def _split_large_paragraph(text: str, max_chars: int) -> list[str]:
+    if len(text) <= max_chars:
+        return [text]
+    sentences = [item.strip() for item in re.split(r"(?<=[。！？.!?；;])\s*", text) if item.strip()]
+    if len(sentences) <= 1:
+        return _hard_split_text(text, max_chars)
+    parts: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for sentence in sentences:
+        if len(sentence) > max_chars:
+            if current:
+                parts.append("".join(current).strip())
+                current = []
+                current_len = 0
+            parts.extend(_hard_split_text(sentence, max_chars))
+            continue
+        if current and current_len + len(sentence) > max_chars:
+            parts.append("".join(current).strip())
+            current = []
+            current_len = 0
+        current.append(sentence)
+        current_len += len(sentence)
+    if current:
+        parts.append("".join(current).strip())
+    return [part for part in parts if part.strip()]
+
+
+def _hard_split_text(text: str, max_chars: int) -> list[str]:
+    return [text[index:index + max_chars].strip() for index in range(0, len(text), max_chars) if text[index:index + max_chars].strip()]
 
 
 def _fallback_bucket_specs(sections: list[str]) -> list[dict[str, Any]]:

@@ -90,24 +90,51 @@ function tokenizePython(code: string): CodeToken[] {
   return tokens;
 }
 
+function tokenizeMarkdown(code: string): CodeToken[] {
+  const tokens: CodeToken[] = [];
+  const pattern = /(^#{1,6}\s.*$|^[-*+]\s+|^>\s.*$|`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^)]+\)|https?:\/\/[^\s)]+|\b\d+(?:\.\d+)?\b)/gm;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(code)) !== null) {
+    appendPlain(tokens, code.slice(cursor, match.index));
+    const value = match[0];
+    let type: TokenType = 'plain';
+    if (value.startsWith('#') || value.startsWith('>')) type = 'keyword';
+    else if (/^[-*+]\s+$/.test(value)) type = 'operator';
+    else if (value.startsWith('`') || value.startsWith('**')) type = 'string';
+    else if (value.startsWith('[') || value.startsWith('http')) type = 'function';
+    else if (/^\d/.test(value)) type = 'number';
+    tokens.push({ text: value, type });
+    cursor = pattern.lastIndex;
+  }
+  appendPlain(tokens, code.slice(cursor));
+  return tokens;
+}
+
 function tokenize(code: string, language?: string): CodeToken[] {
   const normalized = (language || '').toLowerCase();
   if (['text', 'txt', 'log', 'stdout', 'stderr', 'plain'].includes(normalized)) return [{ text: code, type: 'plain' }];
   if (normalized.includes('json')) return tokenizeJson(code);
   if (normalized.includes('python') || normalized === 'py') return tokenizePython(code);
+  if (normalized.includes('markdown') || normalized === 'md') return tokenizeMarkdown(code);
   return tokenizePython(code);
 }
 
-export default function CodeBlock({ code, language, className }: { code: string; language?: string; className?: string }) {
+export function renderCodeTokens(code: string, language?: string) {
   const tokens = tokenize(code, language);
+  return tokens.map((token, index): ReactNode => (
+    token.type === 'plain'
+      ? token.text
+      : <span key={`${token.type}-${index}`} className={`code-token ${token.type}`}>{token.text}</span>
+  ));
+}
+
+export default function CodeBlock({ code, language, className }: { code: string; language?: string; className?: string }) {
   return (
     <pre className={['code-block-vscode', className].filter(Boolean).join(' ')} data-language={language || undefined}>
       <code>
-        {tokens.map((token, index): ReactNode => (
-          token.type === 'plain'
-            ? token.text
-            : <span key={`${token.type}-${index}`} className={`code-token ${token.type}`}>{token.text}</span>
-        ))}
+        {renderCodeTokens(code, language)}
       </code>
     </pre>
   );

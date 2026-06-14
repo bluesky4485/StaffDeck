@@ -730,6 +730,28 @@ body.skill-distill-fixed .content {
   flex: 1 1 260px;
 }
 
+.skill-table-filter-group {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.skill-table-filter-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.skill-table-filter-select {
+  min-width: 150px;
+}
+
 .ant-table-wrapper {
   max-width: 100%;
 }
@@ -932,6 +954,69 @@ body.skill-distill-fixed .content {
   box-shadow: none;
 }
 
+.general-skill-code-editor {
+  position: relative;
+  min-height: 560px;
+  overflow: hidden;
+  background: var(--code-bg);
+  color: var(--code-fg);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  tab-size: 2;
+  box-shadow: inset 0 1px 0 var(--code-border);
+}
+
+.general-skill-code-highlight {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 18px 20px;
+  overflow: hidden;
+  color: var(--code-fg);
+  white-space: pre;
+  pointer-events: none;
+}
+
+.general-skill-code-highlight code {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  font: inherit;
+  will-change: transform;
+}
+
+.general-skill-code-input {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  min-height: 560px;
+  margin: 0;
+  padding: 18px 20px;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  background: transparent !important;
+  color: transparent;
+  caret-color: var(--code-fg);
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: 0;
+  resize: none;
+  tab-size: 2;
+  white-space: pre;
+  -webkit-text-fill-color: transparent;
+  scrollbar-gutter: stable;
+}
+
+.general-skill-code-input::selection {
+  background: var(--code-selection);
+}
+
 .general-skill-file-editor {
   display: grid;
   grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
@@ -983,6 +1068,7 @@ body.skill-distill-fixed .content {
   font-size: 12px;
   text-align: left;
   cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .general-skill-file-node span {
@@ -996,6 +1082,10 @@ body.skill-distill-fixed .content {
 .general-skill-file-node.active {
   color: var(--code-fg);
   background: var(--code-sidebar-active);
+}
+
+.general-skill-file-node.active {
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .general-skill-file-actions {
@@ -1224,6 +1314,16 @@ body.skill-distill-fixed .content {
 
 .general-skill-list-card .ant-card-body {
   padding: 10px;
+}
+
+.general-skill-list-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 10px;
+}
+
+.general-skill-list-toolbar .ant-select {
+  min-width: 132px;
 }
 
 .general-skill-list {
@@ -2623,18 +2723,45 @@ body.skill-distill-fixed .content {
 }
 
 .skill-flow {
-  height: calc(100% - 44px);
+  height: calc(100% - 86px);
   min-height: 0;
   overflow: auto;
   padding: clamp(18px, 2.8vw, 34px) clamp(18px, 3vw, 40px) 64px;
   display: block;
 }
 
-.skill-flow-graph-canvas {
+.skill-flow-zoom-toolbar {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -2px 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.skill-flow-zoom-toolbar .ant-btn {
+  min-width: 34px;
+  border-radius: 9px;
+}
+
+.skill-flow-zoom-value {
+  min-width: 42px;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+.skill-flow-zoom-shell {
   position: relative;
   min-width: 100%;
-  width: max-content;
-  margin-inline: auto;
+  margin-inline: 0 auto;
+}
+
+.skill-flow-graph-canvas {
+  position: absolute;
+  inset: 0 auto auto 0;
+  margin-inline: 0;
   border-radius: 18px;
   background:
     radial-gradient(circle at 40px 40px, rgba(18, 128, 115, 0.05), transparent 240px),
@@ -2642,22 +2769,26 @@ body.skill-distill-fixed .content {
     linear-gradient(rgba(218, 211, 199, 0.26) 1px, transparent 1px);
   background-size: auto, 72px 72px, 72px 72px;
   box-sizing: border-box;
+  transform-origin: top left;
 }
 
 .skill-flow-edges {
   position: absolute;
   top: 0;
   left: 0;
+  z-index: 1;
   overflow: visible;
   pointer-events: none;
 }
 
 .skill-flow-edge-path {
   fill: none;
-  stroke: #c9bca9;
-  stroke-width: 2.1;
+  stroke: #bfb09a;
+  stroke-width: 1.2;
+  stroke-dasharray: 7 11;
   stroke-linecap: round;
   stroke-linejoin: round;
+  opacity: 0.42;
 }
 
 .skill-flow-edges marker path {
@@ -2666,21 +2797,31 @@ body.skill-distill-fixed .content {
 
 .skill-flow-edge-label {
   position: absolute;
-  z-index: 5;
-  max-width: 260px;
-  padding: 5px 11px;
+  z-index: 2;
+  max-width: 190px;
+  padding: 4px 9px;
   color: #5f574b;
   background: rgba(255, 253, 248, 0.98);
   border: 1px solid #d7cbbb;
   border-radius: 999px;
   box-shadow: 0 8px 18px rgba(38, 32, 23, 0.1);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   transform: translate(-50%, -50%);
   pointer-events: none;
+}
+
+.skill-flow-edge-label.branch {
+  max-width: 168px;
+  opacity: 0.94;
+}
+
+.skill-flow-edge-label.return {
+  border-style: dashed;
+  opacity: 0.88;
 }
 
 .skill-flow-root-position {
@@ -2690,7 +2831,7 @@ body.skill-distill-fixed .content {
 
 .skill-flow-node-position {
   position: absolute;
-  z-index: 4;
+  z-index: 5;
 }
 
 .skill-flow-connector-count {
@@ -2741,18 +2882,20 @@ body.skill-distill-fixed .content {
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding: 14px;
+  padding: 14px 15px;
   display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   gap: 7px;
   text-align: left;
   color: var(--foreground);
-  background: var(--surface);
+  background: #fffefd;
   border: 1px solid var(--border);
   border-radius: 10px;
   cursor: pointer;
   user-select: text;
   box-sizing: border-box;
   overflow: hidden;
+  isolation: isolate;
 }
 
 .skill-flow-node.root {
@@ -2982,15 +3125,15 @@ body.skill-distill-fixed .content {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  max-height: none;
-  overflow: visible;
+  max-height: 28px;
+  overflow: hidden;
 }
 
 .skill-flow-node p {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: var(--foreground);
   font-size: 13px;
-  line-height: 1.62;
+  line-height: 1.5;
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -3000,12 +3143,15 @@ body.skill-distill-fixed .content {
   display: -webkit-box;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 3;
 }
 
 .skill-flow-compact-meta {
   display: grid;
+  align-content: start;
   gap: 6px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .skill-flow-route-count {
@@ -3062,8 +3208,8 @@ body.skill-distill-fixed .content {
 
 .skill-flow .skill-flow-chip-list,
 .skill-flow .skill-action-list {
-  max-height: none;
-  overflow: visible;
+  max-height: 54px;
+  overflow: hidden;
 }
 
 .skill-flow-edge-targets .skill-flow-chip-list {
@@ -3484,6 +3630,29 @@ pre {
   box-shadow: var(--shadow-soft);
 }
 
+:root[data-theme='dark'] .skill-flow-graph-canvas {
+  background:
+    radial-gradient(circle at 40px 40px, rgba(228, 185, 118, 0.07), transparent 240px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px),
+    linear-gradient(rgba(148, 163, 184, 0.09) 1px, transparent 1px);
+  background-size: auto, 72px 72px, 72px 72px;
+}
+
+:root[data-theme='dark'] .skill-flow-edge-path {
+  stroke: rgba(228, 185, 118, 0.7);
+  opacity: 0.34;
+}
+
+:root[data-theme='dark'] .skill-flow-edges marker path {
+  fill: rgba(228, 185, 118, 0.78);
+}
+
+:root[data-theme='dark'] .skill-flow-edge-label {
+  color: var(--foreground);
+  background: rgba(17, 24, 39, 0.96);
+  border-color: var(--border);
+}
+
 :root[data-theme='dark'] .app-shell {
   background:
     linear-gradient(90deg, rgba(148, 163, 184, 0.055) 1px, transparent 1px),
@@ -3870,7 +4039,7 @@ pre {
 
   .skill-source-md,
   .skill-flow {
-    height: calc(100% - 44px);
+    height: calc(100% - 86px);
     min-height: 0;
   }
 
@@ -4103,6 +4272,11 @@ pre {
     min-height: 360px;
   }
 
+  .general-skill-code-editor,
+  .general-skill-code-input {
+    min-height: 360px;
+  }
+
   .general-code-block,
   .general-json-block {
     font-size: 11px;
@@ -4232,6 +4406,11 @@ pre {
 
   .skill-flow {
     padding: 22px 20px 40px;
+  }
+
+  .skill-flow-zoom-toolbar {
+    flex-wrap: wrap;
+    margin-bottom: 10px;
   }
 
   .skill-flow-node {

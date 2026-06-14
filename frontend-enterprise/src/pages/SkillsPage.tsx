@@ -462,32 +462,36 @@ export default function SkillsPage() {
                       onChange={(event) => setSearchText(event.target.value)}
                       style={{ maxWidth: 360 }}
                     />
-                    <Space wrap>
+                    <div className="skill-table-filter-group">
+                      <span className="skill-table-filter-label">状态筛选</span>
                       <Select<SkillStatusFilter>
                         value={statusFilter}
                         onChange={setStatusFilter}
-                        style={{ width: 140 }}
+                        className="skill-table-filter-select"
                         options={[
-                          { label: '全部状态', value: 'all' },
+                          { label: '全部（含下线）', value: 'all' },
                           { label: '已发布', value: 'published' },
                           { label: '草稿', value: 'draft' },
                           { label: '已下线', value: 'archived' },
                         ]}
                       />
                       {!isOverallAgent && (
-                        <Select<BranchFilter>
-                          value={branchFilter}
-                          onChange={setBranchFilter}
-                          style={{ width: 148 }}
-                          options={[
-                            { label: '全部分支', value: 'all' },
-                            { label: '已同步', value: 'synced' },
-                            { label: '已分叉', value: 'diverged' },
-                            { label: '分支下线', value: 'inactive' },
-                          ]}
-                        />
+                        <>
+                          <span className="skill-table-filter-label">分支筛选</span>
+                          <Select<BranchFilter>
+                            value={branchFilter}
+                            onChange={setBranchFilter}
+                            className="skill-table-filter-select"
+                            options={[
+                              { label: '全部（含下线）', value: 'all' },
+                              { label: '已同步', value: 'synced' },
+                              { label: '已分叉', value: 'diverged' },
+                              { label: '分支下线', value: 'inactive' },
+                            ]}
+                          />
+                        </>
                       )}
-                    </Space>
+                    </div>
                   </div>
                   <Table
                     rowKey="id"

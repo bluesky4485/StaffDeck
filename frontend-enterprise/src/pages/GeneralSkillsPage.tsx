@@ -3,6 +3,7 @@ import {
   CloudOutlined,
   CloseCircleOutlined,
   DeleteOutlined,
+  EditOutlined,
   ExperimentOutlined,
   FileTextOutlined,
   FolderOpenOutlined,
@@ -15,7 +16,7 @@ import { Button, Card, Dropdown, Empty, Input, Modal, Select, Space, Tag, Typogr
 import type { ChangeEvent, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, streamPost, TENANT_ID } from '../api/client';
-import CodeBlock from '../components/CodeBlock';
+import CodeBlock, { renderCodeTokens } from '../components/CodeBlock';
 import type { GeneralSkillRead, GeneralSkillRunResponse } from '../types';
 
 const DEFAULT_MARKDOWN = `# 技能说明
@@ -160,6 +161,18 @@ function statusColor(status: GeneralSkillRead['status']): string {
   return 'gold';
 }
 
+function languageFromFilePath(path?: string): string {
+  const extension = (path || '').split('.').pop()?.toLowerCase();
+  if (extension === 'py') return 'python';
+  if (extension === 'json') return 'json';
+  if (extension === 'md' || extension === 'markdown') return 'markdown';
+  return 'text';
+}
+
+function normalizeSkillFilePath(path: string): string {
+  return path.replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+/g, '/').trim();
+}
+
 function packagePathFromRaw(value: string): string {
   const normalized = value.replace(/\\/g, '/').replace(/^\/+/, '');
   const parts = normalized.split('/').filter(Boolean);
@@ -284,7 +297,9 @@ export default function GeneralSkillsPage({ embedded = false }: { embedded?: boo
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | GeneralSkillRead['status']>('all');
   const [selectedFilePath, setSelectedFilePath] = useState('SKILL.md');
+  const [editorScroll, setEditorScroll] = useState({ top: 0, left: 0 });
   const [clawhubModalOpen, setClawhubModalOpen] = useState(false);
   const [clawhubSource, setClawhubSource] = useState('');
   const [clawhubLoading, setClawhubLoading] = useState(false);
@@ -301,6 +316,11 @@ export default function GeneralSkillsPage({ embedded = false }: { embedded?: boo
   const selectedFile = useMemo(
     () => skillFiles.find((file) => file.path === selectedFilePath) || skillFiles[0],
     [skillFiles, selectedFilePath],
+  );
+  const selectedFileLanguage = useMemo(() => languageFromFilePath(selectedFile?.path), [selectedFile?.path]);
+  const filteredRows = useMemo(
+    () => rows.filter((row) => statusFilter === 'all' || row.status === statusFilter),
+    [rows, statusFilter],
   );
 
   const load = () =>
@@ -356,6 +376,10 @@ export default function GeneralSkillsPage({ embedded = false }: { embedded?: boo
       setSelectedFilePath(skillFile?.path || skillFiles[0].path);
     }
   }, [skillFiles, selectedFilePath]);
+
+  useEffect(() => {
+    setEditorScroll({ top: 0, left: 0 });
+  }, [selectedFilePath]);
 
   function hasUnsavedEditingChanges(): boolean {
     if (!editingSlug) return false;
@@ -593,11 +617,63 @@ export default function GeneralSkillsPage({ embedded = false }: { embedded?: boo
 
   function deleteSelectedFile() {
     if (!selectedFile) return;
-    if (selectedFile.path.split('/').pop()?.toLowerCase() === 'skill.md') {
+    deleteSkillFile(selectedFile);
+  }
+
+  function deleteSkillFile(target: GeneralSkillFile) {
+    if (target.path.split('/').pop()?.toLowerCase() === 'skill.md') {
       message.warning('SKILL.md 是通用技能入口，不能删除');
       return;
     }
-    setSkillFiles((current) => current.filter((file) => file.path !== selectedFile.path));
+    Modal.confirm({
+      title: `删除文件：${target.path}`,
+      content: '删除后需要重新导入或手动新建该文件。',
+      okText: '删除',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk() {
+        setSkillFiles((current) => current.filter((file) => file.path !== target.path));
+      },
+    });
+  }
+
+  function renameSkillFile(target: GeneralSkillFile) {
+    let nextPath = target.path;
+    Modal.confirm({
+      title: '重命名文件',
+      content: (
+        <Input
+          autoFocus
+          defaultValue={target.path}
+          onChange={(event) => {
+            nextPath = event.target.value;
+          }}
+        />
+      ),
+      okText: '重命名',
+      cancelText: '取消',
+      onOk() {
+        const normalized = normalizeSkillFilePath(nextPath);
+        if (!normalized) {
+          message.error('文件名不能为空');
+          return Promise.reject();
+        }
+        if (normalized === target.path) return undefined;
+        if (skillFiles.some((file) => file.path === normalized)) {
+          message.error('已存在同名文件');
+          return Promise.reject();
+        }
+        setSkillFiles((current) => current.map((file) => (
+          file.path === target.path
+            ? { ...file, path: normalized }
+            : file
+        )));
+        if (selectedFilePath === target.path) {
+          setSelectedFilePath(normalized);
+        }
+        return undefined;
+      },
+    });
   }
 
   async function runSkill() {
@@ -888,16 +964,34 @@ export default function GeneralSkillsPage({ embedded = false }: { embedded?: boo
                 </div>
                 <div className="general-skill-file-tree-list">
                   {skillFiles.map((file) => (
-                    <button
+                    <Dropdown
                       key={file.path}
-                      type="button"
-                      className={`general-skill-file-node ${file.path === selectedFile?.path ? 'active' : ''}`}
-                      onClick={() => setSelectedFilePath(file.path)}
-                      title={file.path}
+                      trigger={['contextMenu']}
+                      menu={{
+                        items: [
+                          { key: 'rename', icon: <EditOutlined />, label: '重命名' },
+                          { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
+                        ],
+                        onClick: ({ key }) => {
+                          if (key === 'rename') {
+                            renameSkillFile(file);
+                            return;
+                          }
+                          deleteSkillFile(file);
+                        },
+                      }}
                     >
-                      <FileTextOutlined />
-                      <span>{file.path}</span>
-                    </button>
+                      <button
+                        type="button"
+                        className={`general-skill-file-node ${file.path === selectedFile?.path ? 'active' : ''}`}
+                        onClick={() => setSelectedFilePath(file.path)}
+                        onContextMenu={() => setSelectedFilePath(file.path)}
+                        title={file.path}
+                      >
+                        <FileTextOutlined />
+                        <span>{file.path}</span>
+                      </button>
+                    </Dropdown>
                   ))}
                 </div>
                 <div className="general-skill-file-actions">
@@ -910,13 +1004,27 @@ export default function GeneralSkillsPage({ embedded = false }: { embedded?: boo
                   <FileTextOutlined />
                   <span>{selectedFile?.path || '未选择文件'}</span>
                 </div>
-                <Input.TextArea
-                  className="general-skill-source-input"
-                  value={selectedFile?.content || ''}
-                  onChange={(event) => updateSelectedFile(event.target.value)}
-                  rows={20}
-                  spellCheck={false}
-                />
+                <div className="general-skill-code-editor" data-language={selectedFileLanguage}>
+                  <pre className="general-skill-code-highlight" aria-hidden="true">
+                    <code
+                      style={{
+                        transform: `translate(${-editorScroll.left}px, ${-editorScroll.top}px)`,
+                      }}
+                    >
+                      {renderCodeTokens(selectedFile?.content || '\u200b', selectedFileLanguage)}
+                    </code>
+                  </pre>
+                  <textarea
+                    className="general-skill-code-input"
+                    value={selectedFile?.content || ''}
+                    onChange={(event) => updateSelectedFile(event.target.value)}
+                    onScroll={(event) => setEditorScroll({
+                      top: event.currentTarget.scrollTop,
+                      left: event.currentTarget.scrollLeft,
+                    })}
+                    spellCheck={false}
+                  />
+                </div>
               </section>
             </div>
           </Card>
@@ -1037,9 +1145,22 @@ export default function GeneralSkillsPage({ embedded = false }: { embedded?: boo
         </Space>
         <aside className="general-skill-side">
           <Card className="data-card general-skill-list-card" title="通用技能">
+            <div className="general-skill-list-toolbar">
+              <Select
+                size="small"
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={[
+                  { label: '全部状态', value: 'all' },
+                  { label: '已发布', value: 'published' },
+                  { label: '草稿', value: 'draft' },
+                  { label: '已下线', value: 'archived' },
+                ]}
+              />
+            </div>
             <div className="general-skill-list">
-              {rows.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无通用技能" />}
-              {rows.map((row) => {
+              {filteredRows.length === 0 && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={rows.length === 0 ? '暂无通用技能' : '没有符合筛选的通用技能'} />}
+              {filteredRows.map((row) => {
                 const active = row.slug === selectedSkill?.slug;
                 return (
                   <div

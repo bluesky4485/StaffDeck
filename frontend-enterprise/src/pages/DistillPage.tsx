@@ -2254,6 +2254,7 @@ function SkillFlow({
   containerRef: RefObject<HTMLDivElement>;
   onToggle: (target: TargetSelection) => void;
 }) {
+  const [flowZoom, setFlowZoom] = useState(0.64);
   const nodes = skillGraphSteps(skill);
   const edgeMap = skillGraphEdgeMap(skill);
   const terminalSet = new Set(asStringList(skill.terminal_node_ids));
@@ -2264,94 +2265,131 @@ function SkillFlow({
     }),
   );
   const graphLayout = buildSkillFlowCanvasLayout(skill, nodes, nodeNameMap);
+  const zoomedWidth = graphLayout.width * flowZoom;
+  const zoomedHeight = graphLayout.height * flowZoom;
+  const updateZoom = (nextZoom: number) => {
+    setFlowZoom(Math.min(1.18, Math.max(0.54, Math.round(nextZoom * 100) / 100)));
+  };
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const rootCenterX = (graphLayout.root.x + graphLayout.root.width / 2) * flowZoom;
+      const targetScrollLeft = Math.max(0, rootCenterX - container.clientWidth / 2);
+      container.scrollLeft = targetScrollLeft;
+      container.scrollTop = 0;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [containerRef, flowZoom, graphLayout.root.x, graphLayout.root.width, skill.skill_id, skill.version]);
   return (
-    <div className="skill-flow" ref={containerRef}>
-      <div
-        className="skill-flow-graph-canvas"
-        style={{ width: graphLayout.width, height: graphLayout.height }}
-      >
-        <svg
-          className="skill-flow-edges"
-          width={graphLayout.width}
-          height={graphLayout.height}
-          viewBox={`0 0 ${graphLayout.width} ${graphLayout.height}`}
-          aria-hidden="true"
-        >
-          <defs>
-            <marker id="skill-flow-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-              <path d="M 0 0 L 10 5 L 0 10 z" />
-            </marker>
-          </defs>
-          {graphLayout.edges.map((edge) => (
-            <path
-              className="skill-flow-edge-path"
-              d={edge.path}
-              key={edge.id}
-              markerEnd="url(#skill-flow-arrow)"
-            />
-          ))}
-        </svg>
-        {graphLayout.edges.map((edge) => (
-          <span
-            className="skill-flow-edge-label"
-            key={`${edge.id}_label`}
-            style={{ left: edge.labelX, top: edge.labelY }}
-            title={edge.title}
-          >
-            {edge.label}
-          </span>
-        ))}
-        <div
-          className="skill-flow-root-position"
-          style={{ left: graphLayout.root.x, top: graphLayout.root.y, width: graphLayout.root.width, height: graphLayout.root.height }}
-        >
-          <SelectableTarget
-            className={targetClass('skill-flow-node root', 'basic', selectedPaths, highlightedPaths, updatingPaths, dirtyPaths)}
-            target={{ path: 'basic', label: '基础信息' }}
-            onToggle={onToggle}
-          >
-            {selectedPaths.includes('basic') && <span className="selection-mark"><CheckOutlined /></span>}
-            <span>基础信息</span>
-            <strong><InlineDiffText path="basic" field="name" value={skill.name} diffs={textDiffs} /></strong>
-            <small>{skill.skill_id}</small>
-            <p><InlineDiffText path="basic" field="description" value={skill.description || '暂无描述'} diffs={textDiffs} /></p>
-            <div className="skill-flow-meta">
-              <FlowMetaRow label="业务域">
-                <span className="skill-flow-chip">{skill.business_domain || '-'}</span>
-              </FlowMetaRow>
-              <FlowMetaRow label="必填信息">
-                <PlainChipList values={skill.required_info} />
-              </FlowMetaRow>
-              <FlowMetaRow label="触发意图">
-                <PlainChipList values={skill.trigger_intents} />
-              </FlowMetaRow>
-            </div>
-          </SelectableTarget>
-        </div>
-        {graphLayout.nodes.map((item) => (
-          <div
-            className="skill-flow-node-position"
-            key={item.nodeId}
-            style={{ left: item.x, top: item.y, width: item.width, height: item.height }}
-          >
-            <SkillFlowNodeCard
-              index={item.index}
-              step={item.step}
-              terminal={terminalSet.has(item.nodeId)}
-              outgoingEdges={edgeMap[item.nodeId] || []}
-              selectedPaths={selectedPaths}
-              highlightedPaths={highlightedPaths}
-              updatingPaths={updatingPaths}
-              dirtyPaths={dirtyPaths}
-              textDiffs={textDiffs}
-              toolDescriptions={toolDescriptions}
-              toolStatuses={toolStatuses}
-              onToggle={onToggle}
-            />
-          </div>
-        ))}
+    <>
+      <div className="skill-flow-zoom-toolbar" aria-label="流程图缩放">
+        <span>缩放</span>
+        <Button size="small" onClick={() => updateZoom(flowZoom - 0.08)}>-</Button>
+        <span className="skill-flow-zoom-value">{Math.round(flowZoom * 100)}%</span>
+        <Button size="small" onClick={() => updateZoom(flowZoom + 0.08)}>+</Button>
+        <Button size="small" onClick={() => updateZoom(0.64)}>适配</Button>
+        <Button size="small" onClick={() => updateZoom(1)}>100%</Button>
       </div>
-    </div>
+      <div className="skill-flow" ref={containerRef}>
+        <div
+          className="skill-flow-zoom-shell"
+          style={{ width: zoomedWidth, height: zoomedHeight }}
+        >
+          <div
+            className="skill-flow-graph-canvas"
+            style={{
+              width: graphLayout.width,
+              height: graphLayout.height,
+              transform: `scale(${flowZoom})`,
+            }}
+          >
+            <svg
+              className="skill-flow-edges"
+              width={graphLayout.width}
+              height={graphLayout.height}
+              viewBox={`0 0 ${graphLayout.width} ${graphLayout.height}`}
+              aria-hidden="true"
+            >
+              <defs>
+                <marker id="skill-flow-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" />
+                </marker>
+              </defs>
+              {graphLayout.edges.map((edge) => (
+                <path
+                  className="skill-flow-edge-path"
+                  d={edge.path}
+                  key={edge.id}
+                  markerEnd="url(#skill-flow-arrow)"
+                >
+                  <title>{edge.title}</title>
+                </path>
+              ))}
+            </svg>
+            {graphLayout.edges.filter((edge) => edge.kind === 'root').map((edge) => (
+              <span
+                className={['skill-flow-edge-label', edge.labelTone || edge.kind].filter(Boolean).join(' ')}
+                key={`${edge.id}_label`}
+                style={{ left: edge.labelX, top: edge.labelY }}
+                title={edge.title}
+              >
+                {edge.label}
+              </span>
+            ))}
+            <div
+              className="skill-flow-root-position"
+              style={{ left: graphLayout.root.x, top: graphLayout.root.y, width: graphLayout.root.width, height: graphLayout.root.height }}
+            >
+              <SelectableTarget
+                className={targetClass('skill-flow-node root', 'basic', selectedPaths, highlightedPaths, updatingPaths, dirtyPaths)}
+                target={{ path: 'basic', label: '基础信息' }}
+                onToggle={onToggle}
+              >
+                {selectedPaths.includes('basic') && <span className="selection-mark"><CheckOutlined /></span>}
+                <span>基础信息</span>
+                <strong><InlineDiffText path="basic" field="name" value={skill.name} diffs={textDiffs} /></strong>
+                <small>{skill.skill_id}</small>
+                <p><InlineDiffText path="basic" field="description" value={skill.description || '暂无描述'} diffs={textDiffs} /></p>
+                <div className="skill-flow-meta">
+                  <FlowMetaRow label="业务域">
+                    <span className="skill-flow-chip">{skill.business_domain || '-'}</span>
+                  </FlowMetaRow>
+                  <FlowMetaRow label="必填信息">
+                    <PlainChipList values={skill.required_info} />
+                  </FlowMetaRow>
+                  <FlowMetaRow label="触发意图">
+                    <PlainChipList values={skill.trigger_intents} />
+                  </FlowMetaRow>
+                </div>
+              </SelectableTarget>
+            </div>
+            {graphLayout.nodes.map((item) => (
+              <div
+                className="skill-flow-node-position"
+                key={item.nodeId}
+                style={{ left: item.x, top: item.y, width: item.width, height: item.height }}
+              >
+                <SkillFlowNodeCard
+                  index={item.index}
+                  step={item.step}
+                  terminal={terminalSet.has(item.nodeId)}
+                  outgoingEdges={edgeMap[item.nodeId] || []}
+                  selectedPaths={selectedPaths}
+                  highlightedPaths={highlightedPaths}
+                  updatingPaths={updatingPaths}
+                  dirtyPaths={dirtyPaths}
+                  textDiffs={textDiffs}
+                  toolDescriptions={toolDescriptions}
+                  toolStatuses={toolStatuses}
+                  onToggle={onToggle}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -2403,7 +2441,7 @@ function SkillFlowNodeCard({
           {Boolean(step.optional) && <span className="skill-flow-chip">可选</span>}
           {terminal && <span className="skill-flow-chip terminal">终止</span>}
         </div>
-        <p className="skill-flow-node-summary">
+        <p className="skill-flow-node-summary" title={instruction}>
           <InlineDiffText path={path} field="instruction" value={instruction} diffs={textDiffs} />
         </p>
         <div className="skill-flow-compact-meta">
@@ -2492,6 +2530,8 @@ type SkillFlowCanvasNode = {
 
 type SkillFlowCanvasEdge = {
   id: string;
+  kind: 'root' | 'edge';
+  labelTone?: 'root' | 'branch' | 'return';
   label: string;
   title: string;
   path: string;
@@ -2505,15 +2545,15 @@ function buildSkillFlowCanvasLayout(
   nodeNameMap: Record<string, string>,
 ) {
   const layerLayout = buildSkillFlowLayout(skill, nodes);
-  const cardWidth = 380;
-  const cardHeight = 286;
-  const rootWidth = 540;
-  const rootHeight = 300;
-  const columnGap = 96;
-  const rowGap = 132;
-  const rootGap = 92;
-  const paddingX = 72;
-  const paddingY = 48;
+  const cardWidth = 360;
+  const cardHeight = 324;
+  const rootWidth = 500;
+  const rootHeight = 270;
+  const columnGap = 188;
+  const rowGap = 236;
+  const rootGap = 126;
+  const paddingX = 144;
+  const paddingY = 66;
   const layerWidths = layerLayout.layers.map((layer) => (
     layer.length * cardWidth + Math.max(0, layer.length - 1) * columnGap
   ));
@@ -2550,7 +2590,13 @@ function buildSkillFlowCanvasLayout(
     if (sourceId) acc[sourceId] = (acc[sourceId] || 0) + 1;
     return acc;
   }, {});
+  const incomingCounts = rawEdges.reduce<Record<string, number>>((acc, edge) => {
+    const targetId = String(edge.next_node_id || '');
+    if (targetId) acc[targetId] = (acc[targetId] || 0) + 1;
+    return acc;
+  }, {});
   const edgeSiblingIndexes: Record<string, number> = {};
+  const incomingIndexes: Record<string, number> = {};
   const layoutEdges: SkillFlowCanvasEdge[] = [];
   const startNode = positionMap.get(String(skill.start_node_id || positionedNodes[0]?.nodeId || ''));
   if (startNode) {
@@ -2561,6 +2607,8 @@ function buildSkillFlowCanvasLayout(
     const bendY = sourceY + Math.max(72, targetY - sourceY) * 0.48;
     layoutEdges.push({
       id: `root_${startNode.nodeId}`,
+      kind: 'root',
+      labelTone: 'root',
       label: '开始',
       title: `开始 -> ${nodeNameMap[startNode.nodeId] || startNode.nodeId}`,
       path: verticalFlowPath(sourceX, sourceY, targetX, targetY, bendY),
@@ -2579,22 +2627,31 @@ function buildSkillFlowCanvasLayout(
     const siblingCount = edgeSiblingCounts[sourceId] || 1;
     const siblingIndex = edgeSiblingIndexes[sourceId] || 0;
     edgeSiblingIndexes[sourceId] = siblingIndex + 1;
+    const incomingCount = incomingCounts[targetId] || 1;
+    const incomingIndex = incomingIndexes[targetId] || 0;
+    incomingIndexes[targetId] = incomingIndex + 1;
     const sourceX = source.x + source.width / 2;
     const sourceY = source.y + source.height;
     const targetX = target.x + target.width / 2;
     const targetY = target.y;
-    const labelOffset = siblingCount > 1 ? (siblingIndex - (siblingCount - 1) / 2) * 18 : 0;
+    const labelOffset = siblingCount > 1 ? (siblingIndex - (siblingCount - 1) / 2) * 26 : 0;
     const bendY = flowEdgeBendY(sourceY, targetY, labelOffset);
+    const isReturn = targetY <= sourceY;
     const path = targetY <= sourceY
       ? sideReturnFlowPath(source, target, width, siblingIndex)
       : verticalFlowPath(sourceX, sourceY, targetX, targetY, bendY);
+    const labelAnchor = isReturn
+      ? returnEdgeLabelPosition(source, target, width, siblingIndex)
+      : forwardEdgeLabelPosition(sourceX, sourceY, targetX, targetY, siblingIndex, siblingCount, incomingIndex, incomingCount);
     layoutEdges.push({
       id: `${sourceId}_${targetId}_${index}`,
-      label,
+      kind: 'edge',
+      label: compactEdgeLabel(label),
       title,
       path,
-      labelX: targetX,
-      labelY: Math.max(sourceY + 32, Math.min(targetY - 32, bendY)),
+      labelX: labelAnchor.x,
+      labelY: labelAnchor.y,
+      labelTone: isReturn ? 'return' : (siblingCount > 1 ? 'branch' : 'root'),
     });
   });
 
@@ -2684,14 +2741,49 @@ function flowEdgeBendY(sourceY: number, targetY: number, offset = 0): number {
 }
 
 function verticalFlowPath(sourceX: number, sourceY: number, targetX: number, targetY: number, bendY: number): string {
-  const firstCurveY = Math.min(bendY, sourceY + 58);
-  const secondCurveY = Math.max(bendY, targetY - 58);
+  const distance = Math.max(120, targetY - sourceY);
+  const controlY = Math.min(distance * 0.48, 132);
+  const easingX = Math.min(Math.abs(targetX - sourceX) * 0.18, 96);
+  const firstControlX = targetX > sourceX ? sourceX + easingX : sourceX - easingX;
+  const secondControlX = targetX > sourceX ? targetX - easingX : targetX + easingX;
+  const midY = Math.max(sourceY + 52, Math.min(targetY - 52, bendY));
   return [
     `M ${sourceX} ${sourceY}`,
-    `C ${sourceX} ${firstCurveY}, ${sourceX} ${bendY}, ${sourceX} ${bendY}`,
-    `L ${targetX} ${bendY}`,
-    `C ${targetX} ${bendY}, ${targetX} ${secondCurveY}, ${targetX} ${targetY}`,
+    `C ${sourceX} ${sourceY + controlY}, ${firstControlX} ${midY}, ${(sourceX + targetX) / 2} ${midY}`,
+    `C ${secondControlX} ${midY}, ${targetX} ${targetY - controlY}, ${targetX} ${targetY}`,
   ].join(' ');
+}
+
+function forwardEdgeLabelPosition(
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  siblingIndex: number,
+  siblingCount: number,
+  incomingIndex: number,
+  incomingCount: number,
+) {
+  const siblingOffset = siblingCount > 1 ? (siblingIndex - (siblingCount - 1) / 2) * 52 : 0;
+  const incomingOffset = incomingCount > 1 ? (incomingIndex - (incomingCount - 1) / 2) * 86 : 0;
+  const x = targetX + incomingOffset * 0.72 + siblingOffset * 0.22;
+  const safeTop = sourceY + 54 + Math.abs(siblingOffset) * 0.18;
+  const safeBottom = targetY - 70 - Math.abs(incomingOffset) * 0.05;
+  const y = Math.max(safeTop, Math.min(safeBottom, sourceY + 74 + siblingIndex * 32));
+  return { x, y };
+}
+
+function returnEdgeLabelPosition(
+  source: SkillFlowCanvasNode,
+  target: SkillFlowCanvasNode,
+  canvasWidth: number,
+  siblingIndex: number,
+) {
+  const sideX = Math.min(canvasWidth - 96, Math.max(source.x + source.width + 96 + siblingIndex * 30, target.x + target.width + 96));
+  return {
+    x: sideX,
+    y: Math.max(72, target.y - 84 - siblingIndex * 18),
+  };
 }
 
 function sideReturnFlowPath(
@@ -2709,11 +2801,9 @@ function sideReturnFlowPath(
   const topY = Math.max(44, targetY - 64);
   return [
     `M ${sourceX} ${sourceY}`,
-    `L ${sourceX} ${bottomY}`,
-    `L ${sideX} ${bottomY}`,
-    `L ${sideX} ${topY}`,
-    `L ${targetX} ${topY}`,
-    `L ${targetX} ${targetY}`,
+    `C ${sourceX} ${bottomY}, ${sideX} ${bottomY}, ${sideX} ${bottomY}`,
+    `C ${sideX} ${bottomY}, ${sideX} ${topY}, ${sideX} ${topY}`,
+    `C ${sideX} ${topY}, ${targetX} ${topY}, ${targetX} ${targetY}`,
   ].join(' ');
 }
 
@@ -2736,6 +2826,12 @@ function edgeDisplayLabel(edge: Record<string, unknown>, nodeNameMap: Record<str
   const source = String(edge.source_node_id || '');
   const sourceName = source && nodeNameMap[source] ? nodeNameMap[source] : source;
   return sourceName ? `来自 ${sourceName}` : '流转';
+}
+
+function compactEdgeLabel(value: string): string {
+  const text = value.replace(/\s+/g, ' ').trim();
+  if (text.length <= 24) return text;
+  return `${text.slice(0, 21)}...`;
 }
 
 function nodeTypeLabel(type: string): string {
