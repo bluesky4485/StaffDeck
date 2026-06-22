@@ -16,6 +16,7 @@ CHAT_HOST="${CHAT_HOST:-127.0.0.1}"
 CHAT_PORT="${CHAT_PORT:-5174}"
 FORCE_PORTS="${FORCE_PORTS:-0}"
 DETACH="${DETACH:-0}"
+AUTO_RESTART="${AUTO_RESTART:-$DETACH}"
 
 api_default_host="$BACKEND_HOST"
 if [[ "$api_default_host" == "0.0.0.0" ]]; then
@@ -144,20 +145,82 @@ wait_url() {
 }
 
 cleanup() {
-  for name in backend enterprise chat; do
+  for name in supervisor backend enterprise chat; do
     stop_pid_file "$name"
   done
 }
 
 remove_legacy_launchctl_labels
 
-for name in backend enterprise chat; do
+for name in supervisor backend enterprise chat; do
   stop_pid_file "$name"
 done
 
 ensure_port_free "$BACKEND_PORT"
 ensure_port_free "$ENTERPRISE_PORT"
 ensure_port_free "$CHAT_PORT"
+
+if [[ "$DETACH" == "1" && "$AUTO_RESTART" == "1" ]]; then
+  supervisor_log="$LOG_DIR/supervisor.log"
+  supervisor_err_file="$LOG_DIR/supervisor.err.log"
+  : > "$supervisor_log"
+  : > "$supervisor_err_file"
+  for name in backend enterprise chat; do
+    : > "$LOG_DIR/$name.log"
+    : > "$LOG_DIR/$name.err.log"
+  done
+  supervisor_pid="$(
+    python3 -c '
+import os
+import subprocess
+import sys
+
+root_dir, script_path, log_file, err_file = sys.argv[1:5]
+env = os.environ.copy()
+with open(log_file, "ab", buffering=0) as stdout, open(err_file, "ab", buffering=0) as stderr:
+    process = subprocess.Popen(
+        [sys.executable, script_path],
+        cwd=root_dir,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=stdout,
+        stderr=stderr,
+        start_new_session=True,
+    )
+print(process.pid)
+' "$ROOT_DIR" "$ROOT_DIR/scripts/dev_supervisor.py" "$supervisor_log" "$supervisor_err_file"
+  )"
+  echo "$supervisor_pid" > "$RUN_DIR/supervisor.pid"
+
+  backend_url_host="$(url_host "$BACKEND_HOST")"
+  enterprise_url_host="$(url_host "$ENTERPRISE_HOST")"
+  chat_url_host="$(url_host "$CHAT_HOST")"
+
+  wait_url "backend" "http://$backend_url_host:$BACKEND_PORT/api/health" "$LOG_DIR/backend.log"
+  wait_url "enterprise" "http://$enterprise_url_host:$ENTERPRISE_PORT/enterprise/dashboard" "$LOG_DIR/enterprise.log"
+  wait_url "chat" "http://$chat_url_host:$CHAT_PORT/chat" "$LOG_DIR/chat.log"
+
+  echo "Started stable supervisor:"
+  echo "  supervisor $supervisor_pid"
+  echo "  backend    http://$backend_url_host:$BACKEND_PORT/docs"
+  echo "  enterprise http://$enterprise_url_host:$ENTERPRISE_PORT/enterprise/dashboard"
+  echo "  chat       http://$chat_url_host:$CHAT_PORT/chat"
+  echo
+  echo "Frontend API base:"
+  echo "  $API_BASE_URL"
+  echo
+  echo "Backend CORS origins:"
+  echo "  $CORS_ORIGINS"
+  echo
+  echo "Logs:"
+  echo "  $LOG_DIR/supervisor.log"
+  echo "  $LOG_DIR/backend.log"
+  echo "  $LOG_DIR/enterprise.log"
+  echo "  $LOG_DIR/chat.log"
+  echo
+  echo "Detached with auto-restart. Use scripts/dev_down.sh to stop."
+  exit 0
+fi
 
 backend_pid="$(start_service "backend" "$BACKEND_DIR" "export CORS_ORIGINS='$CORS_ORIGINS'; exec .venv/bin/uvicorn app.main:app --host '$BACKEND_HOST' --port '$BACKEND_PORT'")"
 enterprise_pid="$(start_service "enterprise" "$ENTERPRISE_DIR" "export VITE_API_BASE_URL='$API_BASE_URL'; exec ./node_modules/.bin/vite --host '$ENTERPRISE_HOST' --port '$ENTERPRISE_PORT' --strictPort")"

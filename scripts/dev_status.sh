@@ -47,7 +47,7 @@ print_port() {
 }
 
 echo "Processes:"
-for name in backend enterprise chat; do
+for name in supervisor backend enterprise chat; do
   print_service "$name"
 done
 echo
@@ -61,3 +61,5 @@ echo
 echo "Health:"
 curl -fsS "http://127.0.0.1:$BACKEND_PORT/api/health" || true
 echo
+curl -fsSI "http://127.0.0.1:$ENTERPRISE_PORT/enterprise/dashboard" >/dev/null && echo "enterprise ok" || echo "enterprise unavailable"
+curl -fsSI "http://127.0.0.1:$CHAT_PORT/chat" >/dev/null && echo "chat ok" || echo "chat unavailable"

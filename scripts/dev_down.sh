@@ -49,6 +49,6 @@ stop_pid_file() {
 
 remove_legacy_launchctl_labels
 
-for name in backend enterprise chat; do
+for name in supervisor backend enterprise chat; do
   stop_pid_file "$name"
 done
