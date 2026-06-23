@@ -4639,7 +4639,8 @@ class AgentLoop:
         chat_session.updated_at = utc_now()
         metadata = self._assistant_message_metadata(step_result, chat_session, source_message)
         reply = self._normalize_reply_citation_labels(reply, metadata.get("knowledge_citations"))
-        reply = self._ensure_reply_citation_labels(reply, metadata.get("knowledge_citations"))
+        reply = self._strip_trailing_citation_summary(reply)
+        metadata = self._metadata_with_reply_citations(metadata, reply)
         chat_session.summary = f"最近回复：{reply[:120]}"
         self._append_message(tenant_id, chat_session.id, "assistant", reply, metadata=metadata)
         event_payload: dict[str, Any] = {"reply": reply}
@@ -4674,26 +4675,42 @@ class AgentLoop:
 
         return re.sub(r"\[(\d+)\]", replace, reply)
 
-    def _ensure_reply_citation_labels(self, reply: str, citations: object) -> str:
+    def _strip_trailing_citation_summary(self, reply: str) -> str:
+        return re.sub(
+            r"(?:\n|\s){0,3}(?:参考资料|引用来源|资料来源)\s*[:：]\s*(?:\[\d+\]\s*)+$",
+            "",
+            reply.rstrip(),
+        ).rstrip()
+
+    def _metadata_with_reply_citations(self, metadata: dict[str, Any], reply: str) -> dict[str, Any]:
+        citations = metadata.get("knowledge_citations")
         if not isinstance(citations, list) or not citations:
-            return reply
-        max_label = len(citations)
-        used: set[int] = set()
+            return metadata
+        used_labels = self._reply_citation_labels(reply, len(citations))
+        if not used_labels:
+            next_metadata = dict(metadata)
+            next_metadata.pop("knowledge_citations", None)
+            next_metadata.pop("knowledge_query", None)
+            return next_metadata
+        next_citations: list[dict[str, Any]] = []
+        for label in sorted(used_labels):
+            index = label - 1
+            if index < 0 or index >= len(citations):
+                continue
+            citation = citations[index]
+            if isinstance(citation, dict):
+                next_citations.append({**citation, "label": f"[{label}]"})
+        next_metadata = dict(metadata)
+        next_metadata["knowledge_citations"] = next_citations
+        return next_metadata
+
+    def _reply_citation_labels(self, reply: str, max_label: int) -> set[int]:
+        labels: set[int] = set()
         for match in re.finditer(r"\[(\d+)\]", reply):
             try:
                 label = int(match.group(1))
             except ValueError:
                 continue
             if 1 <= label <= max_label:
-                used.add(label)
-        missing = [label for label in range(1, max_label + 1) if label not in used]
-        if not missing:
-            return reply
-
-        labels = "".join(f"[{label}]" for label in missing)
-        sequences = list(re.finditer(r"(?:\[\d+\]\s*)+", reply))
-        if sequences:
-            last = sequences[-1]
-            return f"{reply[:last.end()].rstrip()}{labels}{reply[last.end():]}"
-        all_labels = "".join(f"[{label}]" for label in range(1, max_label + 1))
-        return f"{reply.rstrip()}\n\n参考资料：{all_labels}"
+                labels.add(label)
+        return labels

@@ -658,13 +658,48 @@ function canRateMessage(item: ChatMessage): boolean {
   );
 }
 
-function knowledgeCitations(item: ChatMessage): KnowledgeCitation[] {
+function stripTrailingCitationSummary(content: string): string {
+  if (!content) return content;
+  return content
+    .replace(/(?:\n|\s){0,3}(?:参考资料|引用来源|资料来源)\s*[:：]\s*(?:\[\d+\]\s*)+$/u, '')
+    .trimEnd();
+}
+
+function citationLabelsInContent(content: string): Set<number> {
+  const labels = new Set<number>();
+  content.replace(/\[(\d+)\]/g, (_match, value: string) => {
+    const label = Number(value);
+    if (Number.isInteger(label) && label >= 1) {
+      labels.add(label);
+    }
+    return _match;
+  });
+  return labels;
+}
+
+function citationLabelNumber(citation: KnowledgeCitation, fallback: number): number {
+  const labelText = citation.label || citation.id;
+  const match = String(labelText || '').match(/\[(\d+)\]/);
+  if (match) {
+    const label = Number(match[1]);
+    if (Number.isInteger(label) && label >= 1) {
+      return label;
+    }
+  }
+  return fallback;
+}
+
+function knowledgeCitations(item: ChatMessage, content: string): KnowledgeCitation[] {
   const citations = item.metadata?.knowledge_citations;
   if (!Array.isArray(citations)) return [];
+  const usedLabels = citationLabelsInContent(content);
+  if (usedLabels.size === 0) return [];
   const seen = new Set<string>();
   const result: KnowledgeCitation[] = [];
-  citations.forEach((citation) => {
+  citations.forEach((citation, index) => {
     if (!citation || !citation.id) return;
+    const labelNumber = citationLabelNumber(citation, index + 1);
+    if (!usedLabels.has(labelNumber)) return;
     const identity = (
       citation.title || citation.section_path || citation.summary || citation.excerpt || citation.source_path || citation.concept_id || citation.id
     )
@@ -674,35 +709,9 @@ function knowledgeCitations(item: ChatMessage): KnowledgeCitation[] {
     const key = normalizeMessageText(identity).toLowerCase();
     if (!key || seen.has(key)) return;
     seen.add(key);
-    result.push({ ...citation, label: `[${result.length + 1}]` });
+    result.push({ ...citation, label: `[${labelNumber}]` });
   });
-  return result.slice(0, 4);
-}
-
-function contentWithVisibleCitationLabels(content: string, citations: KnowledgeCitation[]): string {
-  if (!content || citations.length === 0) return content;
-  const visibleCount = citations.length;
-  const used = new Set<number>();
-  content.replace(/\[(\d+)\]/g, (_match, value: string) => {
-    const label = Number(value);
-    if (Number.isInteger(label) && label >= 1 && label <= visibleCount) {
-      used.add(label);
-    }
-    return _match;
-  });
-  const missing = Array.from({ length: visibleCount }, (_, index) => index + 1).filter((label) => !used.has(label));
-  if (missing.length === 0) return content;
-
-  const missingLabels = missing.map((label) => `[${label}]`).join('');
-  const sequences = Array.from(content.matchAll(/(?:\[\d+\]\s*)+/g));
-  if (sequences.length > 0) {
-    const last = sequences[sequences.length - 1];
-    const start = last.index ?? 0;
-    const end = start + last[0].length;
-    return `${content.slice(0, end).trimEnd()}${missingLabels}${content.slice(end)}`;
-  }
-  const allLabels = Array.from({ length: visibleCount }, (_, index) => `[${index + 1}]`).join('');
-  return `${content.trimEnd()}\n\n参考资料：${allLabels}`;
+  return result.slice(0, 4).sort((a, b) => citationLabelNumber(a, 0) - citationLabelNumber(b, 0));
 }
 
 function scheduledDraftForMessage(item: ChatMessage): ScheduledTaskDraftRead | null {
@@ -2055,10 +2064,10 @@ export default function ChatWindowPage() {
               const summary = trace && visibleTrace.length > 0 ? traceSummary(trace, visibleTrace) : null;
               const details = traceDetails(visibleTrace);
               const expanded = expandedTraceIds.includes(turnId);
-              const citations = knowledgeCitations(item);
               const visibleContent = item.role === 'assistant'
-                ? contentWithVisibleCitationLabels(item.content, citations)
+                ? stripTrailingCitationSummary(item.content)
                 : item.content;
+              const citations = item.role === 'assistant' ? knowledgeCitations(item, visibleContent) : [];
               const scheduledTaskPrompt = isScheduledTaskPrompt(item);
               const scheduledDraft = item.role === 'assistant' && !dismissedDraftMessageIds.includes(item.id)
                 ? scheduledDraftForMessage(item)

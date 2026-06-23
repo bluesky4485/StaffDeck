@@ -250,6 +250,69 @@ def test_finalize_turn_keeps_current_question_reply() -> None:
     assert session.summary == f"最近回复：{reply[:120]}"
 
 
+def test_finalize_turn_drops_unused_knowledge_citations() -> None:
+    loop = object.__new__(AgentLoop)
+    loop.db = FakeDb()
+    loop.events = FakeEvents()
+    session = ChatSession(
+        id="session_test",
+        tenant_id="tenant_demo",
+        knowledge_context_json=[
+            {
+                "source_message": "自动任务需要结合业务资料",
+                "evidence_pack": [
+                    {
+                        "source_path": "service-handbook.md / 服务原则 / evidence 1",
+                        "excerpt": "服务人员应先确认用户真实诉求。",
+                    }
+                ],
+            }
+        ],
+    )
+    reply = "本次自动任务执行完毕，已成功购买 1 个 A1 商品。"
+
+    loop._finalize_turn(session, "tenant_demo", reply, source_message="自动任务需要结合业务资料")
+
+    message = loop.db.added[-1]
+    assert isinstance(message, Message)
+    assert message.content == reply
+    assert message.metadata_json == {}
+    assert "knowledge_citations" not in loop.events.records[0][3]
+
+
+def test_finalize_turn_keeps_only_inline_knowledge_citations() -> None:
+    loop = object.__new__(AgentLoop)
+    loop.db = FakeDb()
+    loop.events = FakeEvents()
+    session = ChatSession(
+        id="session_test",
+        tenant_id="tenant_demo",
+        knowledge_context_json=[
+            {
+                "source_message": "前端规范有哪些？",
+                "evidence_pack": [
+                    {
+                        "source_path": "frontend.md / 目录规范 / evidence 1",
+                        "excerpt": "前端目录规范说明。",
+                    },
+                    {
+                        "source_path": "frontend.md / 命名规范 / evidence 1",
+                        "excerpt": "前端命名规范说明。",
+                    },
+                ],
+            }
+        ],
+    )
+    reply = "前端规范包括目录组织和命名规范。[2]\n\n参考资料：[1][2]"
+
+    loop._finalize_turn(session, "tenant_demo", reply, source_message="前端规范有哪些？")
+
+    message = loop.db.added[-1]
+    assert isinstance(message, Message)
+    assert message.content == "前端规范包括目录组织和命名规范。[2]"
+    assert [item["label"] for item in message.metadata_json["knowledge_citations"]] == ["[2]"]
+
+
 def test_merge_scheduled_reply_replaces_duplicate_followup_confirmation() -> None:
     loop = object.__new__(AgentLoop)
     refund_then_purchase = (
