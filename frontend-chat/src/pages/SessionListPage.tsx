@@ -7,13 +7,15 @@ import {
   MenuUnfoldOutlined,
   RightOutlined,
 } from '@ant-design/icons';
-import { Button, Empty, Input, Modal, Typography, message } from 'antd';
+import { Button, Empty, Input, Modal, Select, Typography, message } from 'antd';
 import type { MouseEvent } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, clearAuthSession, getAuthSession, isAuthError } from '../api/client';
+import EmployeeAvatarMark from '../components/EmployeeAvatarMark';
+import { employeeDisplayName, employeeProfile } from '../employee';
 import { ThemeToggleButton } from '../theme';
-import type { ChatSession } from '../types';
+import type { AgentProfileRead, ChatSession } from '../types';
 
 function SessionChatIcon() {
   return (
@@ -26,6 +28,8 @@ function SessionChatIcon() {
 
 export default function SessionListPage() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [agents, setAgents] = useState<AgentProfileRead[]>([]);
+  const [sessionAgentFilter, setSessionAgentFilter] = useState('all');
   const [renameSession, setRenameSession] = useState<ChatSession | null>(null);
   const [renameTitle, setRenameTitle] = useState('');
   const navigate = useNavigate();
@@ -36,9 +40,14 @@ export default function SessionListPage() {
   const tenantId = auth?.user.tenant_id || 'tenant_demo';
 
   const load = () =>
-    api
-      .get<ChatSession[]>(`/api/chat/sessions?tenant_id=${tenantId}`)
-      .then(setSessions)
+    Promise.all([
+      api.get<ChatSession[]>(`/api/chat/sessions?tenant_id=${tenantId}`),
+      api.get<AgentProfileRead[]>(`/api/enterprise/agents?tenant_id=${tenantId}`),
+    ])
+      .then(([sessionRows, agentRows]) => {
+        setSessions(sessionRows);
+        setAgents(agentRows);
+      })
       .catch((error) => {
         if (isAuthError(error)) {
           clearAuthSession();
@@ -48,9 +57,41 @@ export default function SessionListPage() {
         message.error(error.message);
       });
 
+  const sessionFilterOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    sessions.forEach((session) => {
+      if (!session.agent_id) return;
+      counts.set(session.agent_id, (counts.get(session.agent_id) || 0) + 1);
+    });
+    const rows = Array.from(counts.keys())
+      .map((agentId) => agents.find((agent) => agent.id === agentId))
+      .filter((agent): agent is AgentProfileRead => Boolean(agent))
+      .sort((a, b) => employeeDisplayName(a).localeCompare(employeeDisplayName(b), 'zh-Hans-CN'));
+    return [
+      { value: 'all', label: `全部员工 · ${sessions.length}` },
+      ...rows.map((agent) => ({
+        value: agent.id,
+        label: `${employeeDisplayName(agent)} · ${counts.get(agent.id) || 0}`,
+      })),
+    ];
+  }, [agents, sessions]);
+
+  const visibleSessions = useMemo(() => (
+    sessionAgentFilter === 'all'
+      ? sessions
+      : sessions.filter((session) => session.agent_id === sessionAgentFilter)
+  ), [sessionAgentFilter, sessions]);
+
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (sessionAgentFilter === 'all') return;
+    if (!sessionFilterOptions.some((item) => item.value === sessionAgentFilter)) {
+      setSessionAgentFilter('all');
+    }
+  }, [sessionAgentFilter, sessionFilterOptions]);
 
   function toggleSidebar() {
     setSidebarCollapsed((current) => {
@@ -138,15 +179,30 @@ export default function SessionListPage() {
           </button>
         )}
         <div className="session-list-scroll">
+          {!sidebarCollapsed && (
+            <div className="session-filter-bar">
+              <span className="session-filter-label">员工会话</span>
+              <Select
+                size="small"
+                className="session-filter-select"
+                value={sessionAgentFilter}
+                options={sessionFilterOptions}
+                onChange={setSessionAgentFilter}
+              />
+            </div>
+          )}
           <div className="session-section-label">任务记录</div>
-          {sessions.length === 0 ? (
+          {visibleSessions.length === 0 ? (
             <div className="session-list-empty">
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="当前员工暂无任务记录" />
             </div>
           ) : (
-            sessions.map((session) => {
+            visibleSessions.map((session) => {
               const sessionTitle = session.title || session.id;
               const sessionSummary = session.summary || session.last_agent_question || '新任务';
+              const sessionAgent = session.agent_id ? agents.find((agent) => agent.id === session.agent_id) || null : null;
+              const sessionProfile = sessionAgent ? employeeProfile(sessionAgent) : null;
+              const sessionAgentFallback = sessionAgent ? employeeDisplayName(sessionAgent).slice(0, 1) : '员';
               return (
                 <div
                   key={session.id}
@@ -162,9 +218,19 @@ export default function SessionListPage() {
                   }}
                 >
                   <div className="session-card-content">
+                    <span className="session-title-icon session-title-avatar">
+                      {sessionProfile ? (
+                        <EmployeeAvatarMark
+                          profile={sessionProfile}
+                          fallback={sessionAgentFallback || '员'}
+                          className="session-agent-avatar"
+                        />
+                      ) : (
+                        <SessionChatIcon />
+                      )}
+                    </span>
                     <div className="session-meta">
                       <div className="session-title" title={sessionTitle}>
-                        <span className="session-title-icon"><SessionChatIcon /></span>
                         <span className="session-title-text">{sessionTitle}</span>
                       </div>
                       <div className="session-summary" title={sessionSummary}>

@@ -14,6 +14,8 @@ import type {
   FeedbackSummaryRead,
 } from '../types';
 
+const ENTERPRISE_AGENT_STORAGE_KEY = 'ultrarag_enterprise_agent_scope';
+
 type LogFilter = 'all' | 'up' | 'down' | 'unrated' | 'ability' | 'tool' | 'knowledge' | 'sop';
 
 type ConversationLogRow = EnterpriseChatSessionRead & {
@@ -41,7 +43,8 @@ const FILTER_OPTIONS = [
 
 export default function FeedbackPage() {
   const [searchParams] = useSearchParams();
-  const agentId = searchParams.get('agent_id') || '';
+  const [scopedAgentId, setScopedAgentId] = useState(() => window.localStorage.getItem(ENTERPRISE_AGENT_STORAGE_KEY) || '');
+  const agentId = searchParams.get('agent_id') || scopedAgentId;
   const [sessions, setSessions] = useState<EnterpriseChatSessionRead[]>([]);
   const [downRows, setDownRows] = useState<FeedbackSessionRead[]>([]);
   const [upRows, setUpRows] = useState<FeedbackSessionRead[]>([]);
@@ -52,16 +55,25 @@ export default function FeedbackPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [reanalyzingId, setReanalyzingId] = useState<string | null>(null);
 
+  useEffect(() => {
+    const onScopeChange = (event: Event) => {
+      setScopedAgentId((event as CustomEvent<{ agentId?: string }>).detail?.agentId || window.localStorage.getItem(ENTERPRISE_AGENT_STORAGE_KEY) || '');
+    };
+    window.addEventListener('ultrarag-enterprise-agent-scope-change', onScopeChange);
+    return () => window.removeEventListener('ultrarag-enterprise-agent-scope-change', onScopeChange);
+  }, []);
+
   const load = async () => {
     setLoading(true);
     try {
+      const agentQuery = agentId ? `&agent_id=${encodeURIComponent(agentId)}` : '';
       const [sessionResult, downResult, upResult, summaryResult] = await Promise.all([
         api.get<EnterpriseChatSessionRead[]>(
-          `/api/enterprise/sessions?tenant_id=${TENANT_ID}${agentId ? `&agent_id=${encodeURIComponent(agentId)}` : ''}`,
+          `/api/enterprise/sessions?tenant_id=${TENANT_ID}${agentQuery}`,
         ),
-        api.get<FeedbackSessionRead[]>(`/api/enterprise/feedback/sessions?tenant_id=${TENANT_ID}&rating=down`),
-        api.get<FeedbackSessionRead[]>(`/api/enterprise/feedback/sessions?tenant_id=${TENANT_ID}&rating=up`),
-        api.get<FeedbackSummaryRead>(`/api/enterprise/feedback/summary?tenant_id=${TENANT_ID}`),
+        api.get<FeedbackSessionRead[]>(`/api/enterprise/feedback/sessions?tenant_id=${TENANT_ID}&rating=down${agentQuery}`),
+        api.get<FeedbackSessionRead[]>(`/api/enterprise/feedback/sessions?tenant_id=${TENANT_ID}&rating=up${agentQuery}`),
+        api.get<FeedbackSummaryRead>(`/api/enterprise/feedback/summary?tenant_id=${TENANT_ID}${agentQuery}`),
       ]);
       setSessions(sessionResult);
       setDownRows(downResult);
@@ -79,14 +91,15 @@ export default function FeedbackPage() {
   }, [agentId]);
 
   const rows = useMemo<ConversationLogRow[]>(() => {
-    const filteredSessions = agentId ? sessions.filter((session) => session.agent_id === agentId) : sessions;
     const downBySession = new Map(downRows.map((item) => [item.session_id, item]));
     const upBySession = new Map(upRows.map((item) => [item.session_id, item]));
-    return filteredSessions.map((session) => ({
-      ...session,
-      downFeedback: downBySession.get(session.id),
-      upFeedback: upBySession.get(session.id),
-    }));
+    return sessions
+      .filter((session) => !agentId || session.agent_id === agentId)
+      .map((session) => ({
+        ...session,
+        downFeedback: downBySession.get(session.id),
+        upFeedback: upBySession.get(session.id),
+      }));
   }, [agentId, downRows, sessions, upRows]);
 
   const filteredRows = useMemo(() => rows.filter((row) => {
@@ -225,7 +238,7 @@ export default function FeedbackPage() {
           <div className="feedback-summary-panel">
             <div className="feedback-summary-text">{summary.summary}</div>
             <Space wrap>
-              <Tag>对话 {sessions.length}</Tag>
+              <Tag>对话 {rows.length}</Tag>
               <Tag>反馈 {summary.total_feedback}</Tag>
               <Tag color="green">好评 {summary.up_count}</Tag>
               <Tag color="red">差评 {summary.down_count}</Tag>

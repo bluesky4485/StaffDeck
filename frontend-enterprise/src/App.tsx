@@ -193,7 +193,7 @@ function Shell({
             children: [
               { key: '/enterprise/dashboard', icon: <DashboardOutlined />, label: '员工信息' },
               { key: '/enterprise/scheduled-tasks', icon: <ClockCircleOutlined />, label: '自动任务' },
-              { key: '/enterprise/memories', icon: <DatabaseOutlined />, label: '员工记忆' },
+              { key: '/enterprise/memories', icon: <DatabaseOutlined />, label: '成长轨迹' },
               { key: '/enterprise/feedback', icon: <CommentOutlined />, label: '对话日志' },
             ],
           },
@@ -383,7 +383,15 @@ function Shell({
             <Radio.Group
               className="agent-create-mode"
               value={agentForm.sourceMode}
-              onChange={(event) => setAgentForm((prev) => ({ ...prev, sourceMode: event.target.value }))}
+              onChange={(event) => {
+                const sourceMode = event.target.value as AgentCreateFormState['sourceMode'];
+                setAgentForm((prev) => ({
+                  ...prev,
+                  sourceMode,
+                  roleKey: sourceMode === 'blank' ? '' : prev.roleKey || EMPLOYEE_TEMPLATES[0]?.key || '',
+                  copyFromAgentId: sourceMode === 'blank' ? '' : prev.copyFromAgentId,
+                }));
+              }}
               optionType="button"
               buttonStyle="solid"
               options={[

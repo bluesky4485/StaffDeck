@@ -1,5 +1,6 @@
 import {
   DeleteOutlined,
+  EditOutlined,
   GlobalOutlined,
   MoreOutlined,
   PauseCircleOutlined,
@@ -14,6 +15,7 @@ import { api, TENANT_ID } from '../api/client';
 import { isEmployeeOwnedBy, isGalleryEmployee, type EnterpriseAuthUser } from '../auth';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import EmployeeAvatarEditor from '../components/EmployeeAvatarEditor';
+import EmployeeProfileEditor from '../components/EmployeeProfileEditor';
 import { employeeDisplayName, employeeProfile, resourceCount } from '../employee';
 import type { AgentProfileRead } from '../types';
 
@@ -30,6 +32,7 @@ export default function AgentsPage({
   const [loading, setLoading] = useState(false);
   const [selectedAgentId, setSelectedAgentId] = useState(() => window.localStorage.getItem(ENTERPRISE_AGENT_STORAGE_KEY) || '');
   const [avatarAgent, setAvatarAgent] = useState<AgentProfileRead | null>(null);
+  const [profileAgent, setProfileAgent] = useState<AgentProfileRead | null>(null);
   const navigate = useNavigate();
 
   async function load() {
@@ -192,6 +195,7 @@ export default function AgentsPage({
             onGallery={(published) => void updateGalleryState(employee, published)}
             onDelete={() => deleteEmployee(employee)}
             onAvatar={() => setAvatarAgent(employee)}
+            onEdit={() => setProfileAgent(employee)}
           />
         ))}
       </div>
@@ -199,6 +203,13 @@ export default function AgentsPage({
         agent={avatarAgent}
         open={Boolean(avatarAgent)}
         onClose={() => setAvatarAgent(null)}
+        onSaved={updateAgentInList}
+      />
+      <EmployeeProfileEditor
+        agent={profileAgent}
+        open={Boolean(profileAgent)}
+        currentUser={currentUser}
+        onClose={() => setProfileAgent(null)}
         onSaved={updateAgentInList}
       />
     </div>
@@ -213,6 +224,7 @@ function EmployeeCard({
   onGallery,
   onDelete,
   onAvatar,
+  onEdit,
 }: {
   employee: AgentProfileRead;
   canManage: boolean;
@@ -221,6 +233,7 @@ function EmployeeCard({
   onGallery: (published: boolean) => void;
   onDelete: () => void;
   onAvatar: () => void;
+  onEdit: () => void;
 }) {
   const profile = employeeProfile(employee);
   const sopCount = resourceCount(employee.resources, 'skill');
@@ -248,6 +261,7 @@ function EmployeeCard({
                 label: galleryPublished ? '从员工广场下架' : '发布到员工广场',
                 disabled: !canManage,
               },
+              { key: 'edit', icon: <EditOutlined />, label: '编辑资料', disabled: !canManage },
               { key: 'avatar', icon: <PictureOutlined />, label: '设置头像', disabled: !canManage },
               { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true, disabled: !canManage },
             ],
@@ -256,6 +270,7 @@ function EmployeeCard({
               if (key === 'active') onStatus('active');
               if (key === 'archive') onStatus('archived');
               if (key === 'gallery') onGallery(!galleryPublished);
+              if (key === 'edit') onEdit();
               if (key === 'avatar') onAvatar();
               if (key === 'delete') onDelete();
             },

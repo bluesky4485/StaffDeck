@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from datetime import timedelta
 from collections.abc import Iterator
 
@@ -8,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
+from app.agents.branching import model_for_agent
 from app.core import AgentLoop
 from app.db import engine, get_session
 from app.db.models import (
@@ -23,6 +25,7 @@ from app.db.models import (
     utc_now,
 )
 from app.feedback import enqueue_feedback_analysis
+from app.llm import LLMClient, LLMError
 from app.security.auth import get_current_user
 from app.security.tenant import ensure_tenant
 from app.scheduled_tasks.schema import ScheduledTaskDraftRead
@@ -40,6 +43,18 @@ from app.session.session_schema import (
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 STREAM_REPLY_CHUNK_SIZE = 96
+SESSION_TITLE_SUMMARY_EVENT = "session_title_summarized"
+SESSION_TITLE_PROMPT = """你是任务派发台的会话标题编辑器。
+
+根据首轮用户需求和员工回复，生成一个简短、可读、具体的中文标题。
+
+要求：
+- 输出 JSON object，格式为 {"title": "..."}。
+- 标题 4 到 18 个中文字符优先，最多 24 个字符。
+- 不要使用“新任务”“任务记录”“用户咨询”等空泛标题。
+- 不要包含标点符号、引号、编号、员工名或用户称呼。
+- 如果无法判断，就返回最能概括用户需求的短语。
+"""
 
 
 def session_read(row: ChatSession) -> ChatSessionRead:
@@ -79,6 +94,109 @@ def _user_message_metadata(request: ChatTurnRequest) -> dict[str, str]:
     if request.model_config_id:
         metadata["model_config_id"] = request.model_config_id
     return metadata
+
+
+def _schedule_session_title_summary(
+    tenant_id: str,
+    user_id: str,
+    session_id: str,
+    agent_id: str | None,
+) -> None:
+    if not session_id:
+        return
+    thread = threading.Thread(
+        target=_summarize_session_title_once,
+        args=(tenant_id, user_id, session_id, agent_id),
+        daemon=True,
+    )
+    thread.start()
+
+
+def _summarize_session_title_once(
+    tenant_id: str,
+    user_id: str,
+    session_id: str,
+    agent_id: str | None,
+) -> None:
+    try:
+        with Session(engine) as db:
+            session = db.exec(
+                select(ChatSession).where(
+                    ChatSession.id == session_id,
+                    ChatSession.tenant_id == tenant_id,
+                    ChatSession.user_id == user_id,
+                )
+            ).first()
+            if not session:
+                return
+            existing = db.exec(
+                select(AgentEvent).where(
+                    AgentEvent.tenant_id == tenant_id,
+                    AgentEvent.session_id == session_id,
+                    AgentEvent.event_type == SESSION_TITLE_SUMMARY_EVENT,
+                )
+            ).first()
+            if existing:
+                return
+            messages = db.exec(
+                select(Message)
+                .where(Message.tenant_id == tenant_id, Message.session_id == session_id)
+                .order_by(Message.created_at)
+                .limit(6)
+            ).all()
+            if not any(row.role == "user" for row in messages):
+                return
+            payload = {
+                "current_title": session.title or "",
+                "messages": [
+                    {"role": row.role, "content": row.content[:1200]}
+                    for row in messages
+                    if row.role in {"user", "assistant"}
+                ],
+            }
+            title = ""
+            title_source = "first_user_fallback"
+            model_config = model_for_agent(db, tenant_id, agent_id or session.agent_id)
+            if model_config:
+                try:
+                    raw = LLMClient(model_config).generate_json(SESSION_TITLE_PROMPT, payload)
+                    title = _normalize_auto_title(str(raw.get("title") or ""))
+                    if title:
+                        title_source = "first_turn_summary"
+                except LLMError:
+                    title = ""
+            if not title:
+                title = _fallback_session_title(messages)
+            if not title:
+                return
+            session.title = title
+            db.add(session)
+            db.add(
+                AgentEvent(
+                    tenant_id=tenant_id,
+                    session_id=session_id,
+                    event_type=SESSION_TITLE_SUMMARY_EVENT,
+                    payload_json={"title": title, "source": title_source},
+                )
+            )
+            db.commit()
+    except (LLMError, Exception):
+        return
+
+
+def _normalize_auto_title(value: str) -> str:
+    title = value.strip().strip("\"'“”‘’`")
+    for token in ("\n", "\r", "\t", "：", ":", "。", "，", ",", "；", ";"):
+        title = title.replace(token, " ")
+    title = " ".join(part for part in title.split() if part)
+    return title[:24]
+
+
+def _fallback_session_title(messages: list[Message]) -> str:
+    first_user = next((row.content for row in messages if row.role == "user" and row.content.strip()), "")
+    if not first_user:
+        return ""
+    return _normalize_auto_title(first_user)
 
 
 def _maybe_handle_scheduled_task_request(
@@ -257,8 +375,10 @@ def chat_turn(
         scheduled_response = _maybe_handle_scheduled_task_request(db, request, chat_session)
         if scheduled_response:
             response, _draft = scheduled_response
+            _schedule_session_title_summary(request.tenant_id, request.user_id, response.session_id, request.agent_id)
             return response
     response = AgentLoop(db).handle_turn(request)
+    _schedule_session_title_summary(request.tenant_id, request.user_id, response.session_id, request.agent_id)
     if request.interaction_mode == "scheduled_task" and request.agent_id:
         draft = detect_scheduled_task_draft(
             db,
@@ -304,11 +424,20 @@ def chat_stream(
                     yield _sse("stream_end", {})
                     yield _sse("complete", response.model_dump(mode="json"))
                     yield _sse("scheduled_task_draft", draft.model_dump(mode="json"))
+                    _schedule_session_title_summary(request.tenant_id, request.user_id, response.session_id, request.agent_id)
                     return
             for item in AgentLoop(db).handle_turn_stream(request):
                 yield _sse(item["event"], item["data"])
-                if item["event"] == "complete" and request.interaction_mode == "scheduled_task" and request.agent_id:
+                if item["event"] == "complete":
                     source_session_id = str(item["data"].get("sessionId") or request.session_id or "")
+                    _schedule_session_title_summary(
+                        request.tenant_id,
+                        request.user_id,
+                        source_session_id,
+                        request.agent_id,
+                    )
+                    if request.interaction_mode != "scheduled_task" or not request.agent_id:
+                        continue
                     draft = detect_scheduled_task_draft(
                         db,
                         request.tenant_id,

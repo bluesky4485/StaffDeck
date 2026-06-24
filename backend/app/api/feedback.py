@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/enterprise/feedback", tags=["enterprise:feedback
 @router.get("/summary")
 def get_feedback_summary(
     tenant_id: str = Query(...),
+    agent_id: str | None = Query(default=None),
     limit: int = Query(default=1000, ge=1, le=5000),
     db: Session = Depends(get_session),
 ) -> dict:
@@ -27,6 +28,8 @@ def get_feedback_summary(
             .limit(limit)
         ).all()
     )
+    if agent_id:
+        rows = [row for row in rows if _feedback_matches_agent(db, tenant_id, row, agent_id)]
     return feedback_summary(rows)
 
 
@@ -34,6 +37,7 @@ def get_feedback_summary(
 def list_feedback_sessions(
     tenant_id: str = Query(...),
     rating: str = Query(default="down"),
+    agent_id: str | None = Query(default=None),
     limit: int = Query(default=200, ge=1, le=1000),
     db: Session = Depends(get_session),
 ) -> list[dict]:
@@ -55,6 +59,8 @@ def list_feedback_sessions(
         chat_session = db.get(ChatSession, session_id)
         if not chat_session or chat_session.tenant_id != tenant_id:
             continue
+        if agent_id and chat_session.agent_id != agent_id:
+            continue
         latest = max(rows, key=lambda item: item.updated_at)
         latest_analysis = feedback_analysis_read(latest)
         latest_message = db.get(Message, latest.message_id)
@@ -69,6 +75,7 @@ def list_feedback_sessions(
             {
                 "session_id": chat_session.id,
                 "tenant_id": chat_session.tenant_id,
+                "agent_id": chat_session.agent_id,
                 "user_id": chat_session.user_id,
                 "username": user.username if user else None,
                 "display_name": user.display_name if user else None,
@@ -90,6 +97,11 @@ def list_feedback_sessions(
             }
         )
     return sorted(results, key=lambda item: item["latest_feedback_at"], reverse=True)
+
+
+def _feedback_matches_agent(db: Session, tenant_id: str, feedback: MessageFeedback, agent_id: str) -> bool:
+    chat_session = db.get(ChatSession, feedback.session_id)
+    return bool(chat_session and chat_session.tenant_id == tenant_id and chat_session.agent_id == agent_id)
 
 
 @router.get("/sessions/{session_id}")

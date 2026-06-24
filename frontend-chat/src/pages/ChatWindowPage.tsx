@@ -1035,6 +1035,7 @@ export default function ChatWindowPage() {
   const [sessionReadTimes, setSessionReadTimes] = useState<Record<string, string>>(() => loadSessionReadTimes(userId));
   const [agents, setAgents] = useState<AgentProfileRead[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState(() => window.localStorage.getItem('skill_agent_selected_agent') || '');
+  const [sessionAgentFilter, setSessionAgentFilter] = useState('all');
   const [modelConfigs, setModelConfigs] = useState<ModelConfigRead[]>([]);
   const [selectedModelConfigId, setSelectedModelConfigId] = useState(
     () => window.localStorage.getItem(modelStorageKey(tenantId)) || '',
@@ -1129,6 +1130,29 @@ export default function ChatWindowPage() {
     : null;
   const displayedAgent = sessionAgent || defaultAgent;
   const displayedProfile = displayedAgent ? employeeProfile(displayedAgent) : null;
+  const sessionFilterOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    sessions.forEach((session) => {
+      if (!session.agent_id) return;
+      counts.set(session.agent_id, (counts.get(session.agent_id) || 0) + 1);
+    });
+    const rows = Array.from(counts.keys())
+      .map((agentId) => agents.find((agent) => agent.id === agentId))
+      .filter((agent): agent is AgentProfileRead => Boolean(agent))
+      .sort((a, b) => employeeDisplayName(a).localeCompare(employeeDisplayName(b), 'zh-Hans-CN'));
+    return [
+      { value: 'all', label: `全部员工 · ${sessions.length}` },
+      ...rows.map((agent) => ({
+        value: agent.id,
+        label: `${employeeDisplayName(agent)} · ${counts.get(agent.id) || 0}`,
+      })),
+    ];
+  }, [agents, sessions]);
+  const visibleSessions = useMemo(() => (
+    sessionAgentFilter === 'all'
+      ? sessions
+      : sessions.filter((session) => session.agent_id === sessionAgentFilter)
+  ), [sessionAgentFilter, sessions]);
   const enabledModelConfigs = useMemo(() => modelConfigs.filter((item) => item.enabled), [modelConfigs]);
   const selectedModelConfig = (
     enabledModelConfigs.find((item) => item.id === selectedModelConfigId)
@@ -1287,6 +1311,12 @@ export default function ChatWindowPage() {
       ),
     }));
   }, [enabledModelConfigs, selectedModelConfig?.id]);
+  useEffect(() => {
+    if (sessionAgentFilter === 'all') return;
+    if (!sessionFilterOptions.some((item) => item.value === sessionAgentFilter)) {
+      setSessionAgentFilter('all');
+    }
+  }, [sessionAgentFilter, sessionFilterOptions]);
   const currentScheduledDraft = sessionId ? scheduledDrafts[sessionId] : undefined;
   const hasVisibleMessageScheduledDraft = displayedMessages.some((item) => (
     item.role === 'assistant'
@@ -2414,14 +2444,36 @@ export default function ChatWindowPage() {
           </button>
         )}
         <div className="session-list-scroll">
+          {!sidebarCollapsed && (
+            <div className="session-filter-bar">
+              <span className="session-filter-label">员工会话</span>
+              <Select
+                size="small"
+                className="session-filter-select"
+                value={sessionAgentFilter}
+                options={sessionFilterOptions}
+                onChange={setSessionAgentFilter}
+              />
+            </div>
+          )}
           <div className="session-section-label">任务记录</div>
-          {sessions.map((session) => {
+          {visibleSessions.length === 0 && !sidebarCollapsed ? (
+            <div className="session-list-empty">当前员工暂无任务记录</div>
+          ) : null}
+          {visibleSessions.map((session) => {
             const itemStream = getStreamSlot(session.id);
             const sessionTitle = session.title || session.id;
             const sessionSummary = itemStream.loading
               ? itemStream.phase || '正在思考'
               : session.summary || session.last_agent_question || '新任务';
             const hasUnread = sessionHasUnreadReply(session, sessionReadTimes, sessionId);
+            const sessionAgentForCard = session.agent_id
+              ? agents.find((agent) => agent.id === session.agent_id) || null
+              : null;
+            const sessionProfileForCard = sessionAgentForCard ? employeeProfile(sessionAgentForCard) : null;
+            const sessionAgentFallback = sessionAgentForCard
+              ? employeeDisplayName(sessionAgentForCard).slice(0, 1)
+              : '员';
             return (
               <div
                 key={session.id}
@@ -2437,9 +2489,19 @@ export default function ChatWindowPage() {
                 }}
               >
                 <div className="session-card-content">
+                  <span className="session-title-icon session-title-avatar">
+                    {sessionProfileForCard ? (
+                      <EmployeeAvatarMark
+                        profile={sessionProfileForCard}
+                        fallback={sessionAgentFallback || '员'}
+                        className="session-agent-avatar"
+                      />
+                    ) : (
+                      <SessionChatIcon />
+                    )}
+                  </span>
                   <div className="session-meta">
                     <div className="session-title" title={sessionTitle}>
-                      <span className="session-title-icon"><SessionChatIcon /></span>
                       <span className="session-title-text">{sessionTitle}</span>
                     </div>
                     <div className="session-summary" title={sessionSummary}>

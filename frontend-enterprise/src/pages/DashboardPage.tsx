@@ -5,6 +5,7 @@ import {
   ClockCircleOutlined,
   DashboardOutlined,
   DatabaseOutlined,
+  EditOutlined,
   FileTextOutlined,
   MessageOutlined,
   PictureOutlined,
@@ -20,6 +21,7 @@ import { api, TENANT_ID } from '../api/client';
 import { isEmployeeOwnedBy, isGalleryEmployee, type EnterpriseAuthUser } from '../auth';
 import EmployeeAvatar from '../components/EmployeeAvatar';
 import EmployeeAvatarEditor from '../components/EmployeeAvatarEditor';
+import EmployeeProfileEditor from '../components/EmployeeProfileEditor';
 import { employeeDisplayName, employeeProfile, resourceCount } from '../employee';
 import type {
   AgentProfileRead,
@@ -51,6 +53,12 @@ type GrowthEvent = {
   tone: string;
 };
 
+type GrowthTimestampSource = {
+  created_at?: string;
+  updated_at?: string;
+  metadata?: Record<string, unknown>;
+};
+
 export default function DashboardPage({
   currentUser,
   isAdmin = false,
@@ -73,6 +81,7 @@ export default function DashboardPage({
   const [replyStats, setReplyStats] = useState<ReplyStats>({ total: 0, today: 0, byDay: {} });
   const [agentId, setAgentId] = useState(() => window.localStorage.getItem(ENTERPRISE_AGENT_STORAGE_KEY) || '');
   const [avatarEditorOpen, setAvatarEditorOpen] = useState(false);
+  const [profileEditorOpen, setProfileEditorOpen] = useState(false);
 
   useEffect(() => {
     const onScopeChange = (event: Event) => {
@@ -91,7 +100,7 @@ export default function DashboardPage({
       api.get<ModelConfigRead[]>(`/api/enterprise/model-configs?tenant_id=${TENANT_ID}`),
       api.get<ToolRead[]>(`/api/enterprise/tools?tenant_id=${TENANT_ID}`),
       api.get<EnterpriseChatSessionRead[]>(`/api/enterprise/sessions?tenant_id=${TENANT_ID}`),
-      api.get<FeedbackSummaryRead>(`/api/enterprise/feedback/summary?tenant_id=${TENANT_ID}`),
+      api.get<FeedbackSummaryRead>(`/api/enterprise/feedback/summary?tenant_id=${TENANT_ID}${agentId ? `&agent_id=${encodeURIComponent(agentId)}` : ''}`),
       api.get<ScheduledTaskRead[]>(`/api/enterprise/scheduled-tasks?tenant_id=${TENANT_ID}${agentId ? `&agent_id=${encodeURIComponent(agentId)}` : ''}`),
     ])
       .then(([agentRows, skillRows, generalSkillRows, kbRows, modelRows, toolRows, sessionRows, feedbackRows, taskRows]) => {
@@ -325,6 +334,15 @@ export default function DashboardPage({
           <div className="employee-home-title-row">
             <Typography.Title level={2}>{employeeDisplayName(selectedAgent)}</Typography.Title>
             <Tag>{employee.roleName}</Tag>
+            {canEditSelectedAgent && (
+              <Button
+                size="small"
+                icon={<EditOutlined />}
+                onClick={() => setProfileEditorOpen(true)}
+              >
+                编辑资料
+              </Button>
+            )}
           </div>
           <Space wrap className="employee-home-meta">
             <span className="employee-online-dot" />
@@ -347,6 +365,13 @@ export default function DashboardPage({
         agent={selectedAgent}
         open={avatarEditorOpen}
         onClose={() => setAvatarEditorOpen(false)}
+        onSaved={(saved) => setAgents((current) => current.map((item) => (item.id === saved.id ? saved : item)))}
+      />
+      <EmployeeProfileEditor
+        agent={selectedAgent}
+        open={profileEditorOpen}
+        currentUser={currentUser}
+        onClose={() => setProfileEditorOpen(false)}
         onSaved={(saved) => setAgents((current) => current.map((item) => (item.id === saved.id ? saved : item)))}
       />
 
@@ -398,7 +423,7 @@ export default function DashboardPage({
         <div className="employee-section-head">
           <div>
             <Typography.Title level={4}>
-              <span className="employee-memory-heading"><DatabaseOutlined /> 员工记忆</span>
+              <span className="employee-memory-heading"><DatabaseOutlined /> 成长轨迹</span>
             </Typography.Title>
             <Typography.Text type="secondary">员工学习 SOP、掌握技能、升级流程和学会工具的时间线。</Typography.Text>
           </div>
@@ -575,7 +600,7 @@ function growthTimeline(
       description: evolved
         ? `员工版本从 ${item.branch_base_version || item.version} 进化到 ${item.branch_head_version || item.version}`
         : `学习 ${item.version} 版业务流程`,
-      timestamp: item.updated_at || item.created_at,
+      timestamp: stableGrowthTimestamp(item),
       icon: <ProfileOutlined />,
       tone: 'mint',
     });
@@ -588,7 +613,7 @@ function growthTimeline(
       kind: upgraded ? '技能升级' : '学会技能',
       title: item.name,
       description: upgraded ? '技能说明、权限或运行配置有更新' : `掌握 ${item.slug} 通用能力`,
-      timestamp: item.updated_at || item.created_at,
+      timestamp: stableGrowthTimestamp(item),
       icon: <CheckCircleOutlined />,
       tone: 'teal',
     });
@@ -600,7 +625,7 @@ function growthTimeline(
       kind: '学会工具',
       title: item.display_name || item.name,
       description: `${item.bucket || '工具箱'} · ${item.tool_type.toUpperCase()} 调用能力`,
-      timestamp: item.updated_at,
+      timestamp: stableGrowthTimestamp(item),
       icon: <ToolOutlined />,
       tone: 'green',
     });
@@ -610,6 +635,19 @@ function growthTimeline(
     .filter((item) => Boolean(item.timestamp))
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
     .slice(-8);
+}
+
+function stableGrowthTimestamp(item: GrowthTimestampSource): string {
+  const metadata = item.metadata || {};
+  const candidates = [
+    metadata.learned_at,
+    metadata.assigned_at,
+    metadata.installed_at,
+    metadata.imported_at,
+    metadata.created_at,
+    item.created_at,
+  ];
+  return candidates.find((value): value is string => typeof value === 'string' && Boolean(value.trim())) || '';
 }
 
 function isMeaningfullyUpdated(createdAt?: string, updatedAt?: string): boolean {

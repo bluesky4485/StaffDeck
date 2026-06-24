@@ -351,6 +351,7 @@ export type ToolRead = {
   output_schema: Record<string, unknown>;
   allowed_skills: string[];
   enabled: boolean;
+  created_at: string;
   updated_at: string;
 };
 
@@ -452,6 +453,7 @@ export type TraceSummary = {
 export type FeedbackSessionRead = {
   session_id: string;
   tenant_id: string;
+  agent_id?: string;
   user_id?: string;
   username?: string;
   display_name?: string;

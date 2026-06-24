@@ -4620,6 +4620,7 @@ function toolReadFromSuggestion(suggestion: ToolSuggestionItem, skillId?: string
     output_schema: outputSchema,
     allowed_skills: skillId ? [skillId] : [],
     enabled: true,
+    created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
 }
