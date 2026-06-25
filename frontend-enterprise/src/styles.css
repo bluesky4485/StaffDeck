@@ -4756,6 +4756,11 @@ body.skill-distill-fixed .content {
   overflow: hidden;
 }
 
+.skill-distill-page .skill-source-card .ant-card-body {
+  display: flex;
+  flex-direction: column;
+}
+
 .skill-chat-panel {
   position: relative;
   height: 100%;
@@ -5453,6 +5458,7 @@ body.skill-distill-fixed .content {
 .skill-source-toolbar {
   margin-bottom: 14px;
   justify-content: flex-start;
+  flex: 0 0 auto;
 }
 
 .skill-source-md {
@@ -5466,6 +5472,22 @@ body.skill-distill-fixed .content {
   display: grid;
   gap: 14px;
   align-content: start;
+}
+
+.skill-distill-page .skill-source-md {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: clamp(6px, 1vw, 14px);
+  scrollbar-gutter: stable;
+}
+
+.skill-distill-page .skill-flow {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
 }
 
 .skill-source-section {
@@ -5622,15 +5644,8 @@ body.skill-distill-fixed .content {
 textarea.skill-source-edit-input.ant-input,
 .skill-source-edit-input textarea.ant-input {
   resize: none;
-  overflow: hidden !important;
-  scrollbar-width: none;
-}
-
-textarea.skill-source-edit-input.ant-input::-webkit-scrollbar,
-.skill-source-edit-input textarea.ant-input::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
+  overflow-y: auto !important;
+  scrollbar-width: thin;
 }
 
 .skill-source-readonly-value {
