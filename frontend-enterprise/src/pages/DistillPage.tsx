@@ -3230,8 +3230,12 @@ function visualTextWidth(value: string): number {
   }, 0);
 }
 
-function fullSourceInputStyle(): CSSProperties {
-  return { width: '100%' };
+function sourceInputStyle(value: string, multiline = false): CSSProperties {
+  const longestLine = String(value || '').split('\n').reduce((max, line) => Math.max(max, visualTextWidth(line)), 0);
+  const minCh = multiline ? 34 : 18;
+  const maxCh = multiline ? 96 : 72;
+  const width = Math.max(minCh, Math.min(maxCh, longestLine + 4));
+  return { width: `${width}ch`, maxWidth: '100%' };
 }
 
 function EditableSourceHeading({ value, onChange }: { value: string; onChange: (value: string) => void }) {
@@ -3292,7 +3296,7 @@ function EditableSourceTextLine({
             <Input.TextArea
               className="skill-source-edit-input"
               value={value}
-              style={fullSourceInputStyle()}
+              style={sourceInputStyle(value, true)}
               autoSize={{ minRows: 2 }}
               onChange={(event) => onChange(event.target.value)}
             />
@@ -3300,7 +3304,7 @@ function EditableSourceTextLine({
             <Input
               className="skill-source-edit-input"
               value={value}
-              style={fullSourceInputStyle()}
+              style={sourceInputStyle(value)}
               onChange={(event) => onChange(event.target.value)}
             />
           )}
@@ -3327,7 +3331,7 @@ function EditableSourceListLine({
           <Input.TextArea
             className="skill-source-edit-input"
             value={values.join('\n')}
-            style={fullSourceInputStyle()}
+            style={sourceInputStyle(values.join('\n'), true)}
             autoSize={{ minRows: 1 }}
             onChange={(event) => onChange(event.target.value)}
           />

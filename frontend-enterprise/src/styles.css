@@ -5460,8 +5460,8 @@ body.skill-distill-fixed .content {
 .skill-source-md {
   height: auto;
   min-height: 0;
-  width: min(100%, 1120px);
-  max-width: 100%;
+  width: 100%;
+  max-width: none;
   justify-self: start;
   box-sizing: border-box;
   overflow: visible;
@@ -5583,7 +5583,7 @@ body.skill-distill-fixed .content {
 
 .skill-source-edit-field {
   min-width: 0;
-  width: 100%;
+  width: fit-content;
   max-width: 100%;
   display: flex;
   align-items: flex-start;
@@ -5593,8 +5593,12 @@ body.skill-distill-fixed .content {
 .skill-source-value .ant-input-affix-wrapper,
 .skill-source-value .ant-input-textarea,
 .skill-source-value textarea.ant-input {
-  width: 100% !important;
   min-width: 0;
+}
+
+.skill-source-value .ant-input-textarea {
+  width: fit-content;
+  max-width: 100%;
 }
 
 .skill-source-title-input.ant-input,
