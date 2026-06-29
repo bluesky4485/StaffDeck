@@ -13686,22 +13686,30 @@ body:has(.sd1-scheduled-page) .topbar {
   }
 }
 
-.employee-capability-card.ant-card,
-.employee-capability-card.is-dark.ant-card {
+.employee-capability-card.ant-card:not(.is-dark) {
   color: #202226 !important;
   border-color: #eef1f5 !important;
   background: #ffffff !important;
   box-shadow: 0 16px 34px rgba(21, 26, 38, 0.055) !important;
 }
 
+.employee-capability-card.is-dark.ant-card {
+  color: #ffffff !important;
+  border-color: #242428 !important;
+  background: #242428 !important;
+  box-shadow: none !important;
+}
+
 .employee-capability-card.is-dark .employee-capability-head,
 .employee-capability-card.is-dark .employee-capability-head em,
-.employee-capability-card.is-dark .employee-capability-title {
-  color: #202226 !important;
+.employee-capability-card.is-dark .employee-capability-title,
+.employee-capability-card.is-dark .employee-capability-action,
+.employee-capability-card.is-dark .employee-capability-action .sd1-icon {
+  color: #ffffff !important;
 }
 
 .employee-capability-card.is-dark .ant-typography {
-  color: #7d879c !important;
+  color: rgba(255, 255, 255, 0.72) !important;
 }
 
 .employee-capability-head {
