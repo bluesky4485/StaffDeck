@@ -11345,12 +11345,12 @@ body,
 
 .sd1-sidebar.is-expanded .sd1-rail-logo {
   position: absolute;
-  left: 20px;
+  left: 58px;
   top: 10px;
-  width: 180px;
+  width: 142px;
   height: 50px;
   margin: 0;
-  padding: 0 12px;
+  padding: 0 10px 0 0;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -11359,8 +11359,8 @@ body,
 }
 
 .sd1-sidebar.is-expanded .sd1-rail-logo img {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
 }
 
 .sd1-sidebar.is-expanded .sd1-brand-text {
@@ -11653,14 +11653,14 @@ body,
 }
 
 .sd1-sidebar.is-expanded .sd1-rail-toggle {
-  left: 186px;
-  top: 42px;
+  left: 20px;
+  top: 10px;
   bottom: auto;
-  width: 14px;
-  height: 14px;
-  border-radius: 0 !important;
-  color: #a0a8ba !important;
-  background: transparent !important;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  background: #111111 !important;
 }
 
 .sd1-sidebar.is-collapsed .sd1-rail-toggle {
@@ -11677,7 +11677,7 @@ body,
 .topbar {
   position: fixed !important;
   top: 30px;
-  right: 56px;
+  right: max(56px, calc((100vw - 72px - 1368px) / 2 + 56px));
   z-index: 20;
   width: auto !important;
   height: 40px !important;
@@ -11686,6 +11686,10 @@ body,
   border: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
+}
+
+.app-shell.sidebar-expanded .topbar {
+  right: max(56px, calc((100vw - 220px - 1368px) / 2 + 56px));
 }
 
 .topbar-scope,
@@ -11741,10 +11745,10 @@ body,
 
 .employee-home-page {
   width: 100%;
-  max-width: none !important;
+  max-width: 1368px !important;
   min-width: 0;
   min-height: 900px;
-  margin: 0 !important;
+  margin: 0 auto !important;
   padding: 30px 20px 0;
   display: block !important;
   gap: 0 !important;
@@ -12505,6 +12509,7 @@ body,
   .employee-home-page {
     min-width: 0;
     min-height: 0;
+    max-width: none !important;
     padding: 24px 16px;
     overflow: visible;
   }
@@ -12571,6 +12576,7 @@ body,
     height: auto;
     min-height: 665px;
     grid-template-rows: auto auto auto auto auto;
+    align-content: start;
     overflow: hidden;
   }
 
@@ -12591,6 +12597,12 @@ body,
     overflow: auto !important;
   }
 
+  .employee-heatmap-months,
+  .employee-heatmap-body,
+  .employee-heatmap-legend {
+    min-width: 818px;
+  }
+
   .employee-memory-timeline {
     width: 100%;
     max-width: 100%;
@@ -12598,6 +12610,29 @@ body,
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
     grid-auto-flow: row !important;
     grid-auto-columns: auto !important;
+    gap: 18px;
+    padding: 0;
+  }
+
+  .employee-memory-timeline::before {
+    display: none;
+  }
+
+  .employee-memory-event {
+    min-height: 112px;
+    padding-left: 20px;
+  }
+
+  .employee-memory-dot {
+    left: 0;
+    top: 31px;
+  }
+
+  .employee-memory-copy {
+    width: 100%;
+    height: auto;
+    min-height: 61px;
+    margin-top: 10px;
   }
 
   .employee-capability-grid {
@@ -12652,12 +12687,7 @@ body,
     grid-auto-flow: row !important;
     grid-auto-columns: auto !important;
     gap: 18px;
-    padding: 0 18px;
-  }
-
-  .employee-memory-timeline::before {
-    left: 18px;
-    right: 18px;
+    padding: 0;
   }
 
   .employee-capability-grid {
@@ -12746,11 +12776,7 @@ body,
     grid-template-columns: minmax(0, 1fr) !important;
     grid-auto-flow: row !important;
     grid-auto-columns: auto !important;
-    padding: 0 10px;
-  }
-
-  .employee-memory-timeline::before {
-    display: none;
+    padding: 0;
   }
 }
 
