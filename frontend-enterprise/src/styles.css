@@ -11864,8 +11864,12 @@ body,
 }
 
 .employee-id-card .employee-avatar {
+  position: absolute !important;
+  left: 20px !important;
+  top: 0 !important;
   width: 136px !important;
   height: 160px !important;
+  display: block !important;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -13526,7 +13530,16 @@ body,
   }
 
   .employee-id-card {
+    width: 192px !important;
+    min-width: 192px !important;
+    max-width: 192px !important;
     margin-bottom: 54px;
+  }
+
+  .employee-id-card .employee-avatar img {
+    width: 136px !important;
+    height: 160px !important;
+    transform: none !important;
   }
 
   .employee-home-main {
