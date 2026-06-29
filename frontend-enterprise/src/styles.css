@@ -12954,6 +12954,114 @@ body,
   font-weight: 700;
 }
 
+:root[data-theme='dark'] body,
+:root[data-theme='dark'] .app-shell,
+:root[data-theme='dark'] .content,
+:root[data-theme='dark'] .employee-home-page,
+:root[data-theme='dark'] .sd1-agents-page {
+  color: #f5f6f8 !important;
+  background: #111214 !important;
+}
+
+:root[data-theme='dark'] .employee-home-title-row h1,
+:root[data-theme='dark'] .employee-home-title-row h2,
+:root[data-theme='dark'] .employee-home-title-row h3,
+:root[data-theme='dark'] .employee-home-title-row span,
+:root[data-theme='dark'] .employee-system-summary,
+:root[data-theme='dark'] .employee-profile-tabs button.active,
+:root[data-theme='dark'] .employee-growth-title,
+:root[data-theme='dark'] .employee-capability-head em,
+:root[data-theme='dark'] .employee-capability-title,
+:root[data-theme='dark'] .sd1-agents-summary strong,
+:root[data-theme='dark'] .sd1-agents-page .employee-roster-title strong,
+:root[data-theme='dark'] .sd1-agents-page .employee-roster-stats strong {
+  color: #f5f6f8 !important;
+}
+
+:root[data-theme='dark'] .employee-home-meta,
+:root[data-theme='dark'] .employee-home-meta .ant-typography,
+:root[data-theme='dark'] .employee-profile-tabs button,
+:root[data-theme='dark'] .employee-work-metric span,
+:root[data-theme='dark'] .employee-heatmap-months,
+:root[data-theme='dark'] .employee-heatmap-weekdays,
+:root[data-theme='dark'] .employee-heatmap-legend,
+:root[data-theme='dark'] .employee-memory-copy small,
+:root[data-theme='dark'] .employee-memory-copy span,
+:root[data-theme='dark'] .employee-capability-card .ant-typography,
+:root[data-theme='dark'] .sd1-agents-summary span:not(.sd1-agents-add),
+:root[data-theme='dark'] .sd1-agents-summary small,
+:root[data-theme='dark'] .sd1-agents-tabs button,
+:root[data-theme='dark'] .sd1-agents-page .employee-roster-title span,
+:root[data-theme='dark'] .sd1-agents-page .employee-roster-card .ant-typography,
+:root[data-theme='dark'] .sd1-agents-page .employee-roster-stats em {
+  color: #aab2c5 !important;
+}
+
+:root[data-theme='dark'] .employee-metric-tile,
+:root[data-theme='dark'] .employee-profile-tabs,
+:root[data-theme='dark'] .employee-work-card,
+:root[data-theme='dark'] .employee-work-metrics,
+:root[data-theme='dark'] .employee-work-metric,
+:root[data-theme='dark'] .employee-memory-copy,
+:root[data-theme='dark'] .employee-capability-card.ant-card,
+:root[data-theme='dark'] .sd1-agents-search .ant-input-affix-wrapper,
+:root[data-theme='dark'] .sd1-agents-summary button,
+:root[data-theme='dark'] .sd1-agents-page .employee-roster-card.ant-card,
+:root[data-theme='dark'] .sd1-agents-page .employee-roster-head,
+:root[data-theme='dark'] .sd1-agents-page .employee-roster-stats,
+:root[data-theme='dark'] .sd1-agents-empty {
+  color: #f5f6f8 !important;
+  border-color: #2c2e35 !important;
+  background: #17181c !important;
+  box-shadow: none !important;
+}
+
+:root[data-theme='dark'] .employee-capability-card.is-dark.ant-card {
+  border-color: #3a3a42 !important;
+  background: #242428 !important;
+}
+
+:root[data-theme='dark'] .employee-work-metric,
+:root[data-theme='dark'] .employee-metric-tile,
+:root[data-theme='dark'] .sd1-agents-page .employee-roster-stats span {
+  border-color: #2c2e35 !important;
+}
+
+:root[data-theme='dark'] .employee-heatmap-cell,
+:root[data-theme='dark'] .employee-heatmap-legend i,
+:root[data-theme='dark'] .sd1-agents-tabs button.active::after {
+  background: #343640 !important;
+}
+
+:root[data-theme='dark'] .employee-heatmap-cell.level-1,
+:root[data-theme='dark'] .employee-heatmap-legend i.level-1 {
+  background: #5a6274 !important;
+}
+
+:root[data-theme='dark'] .employee-heatmap-cell.level-2,
+:root[data-theme='dark'] .employee-heatmap-legend i.level-2 {
+  background: #7b8498 !important;
+}
+
+:root[data-theme='dark'] .employee-heatmap-cell.level-3,
+:root[data-theme='dark'] .employee-heatmap-legend i.level-3 {
+  background: #a4adbf !important;
+}
+
+:root[data-theme='dark'] .employee-heatmap-cell.level-4,
+:root[data-theme='dark'] .employee-heatmap-legend i.level-4 {
+  background: #f5f6f8 !important;
+}
+
+:root[data-theme='dark'] .employee-memory-timeline::before {
+  background: #343640 !important;
+}
+
+:root[data-theme='dark'] .sd1-agents-search .ant-input,
+:root[data-theme='dark'] .sd1-agents-search .ant-input::placeholder {
+  color: #aab2c5 !important;
+}
+
 @media (max-width: 1180px) {
   .employee-home-page {
     min-width: 0;

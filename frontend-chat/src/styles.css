@@ -5163,10 +5163,10 @@ body,
   display: flex !important;
   flex-direction: column !important;
   justify-content: space-between !important;
-  border: 0.5px solid #18181a !important;
+  border: 0.5px solid #e8e6f2 !important;
   border-radius: 14px !important;
   background: #ffffff !important;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05) !important;
+  box-shadow: 0 14px 38px rgba(35, 38, 48, 0.08) !important;
 }
 
 .chat-layout.sidebar-collapsed .composer-v2 {

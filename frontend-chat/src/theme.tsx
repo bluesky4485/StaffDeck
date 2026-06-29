@@ -1,4 +1,4 @@
-import { DesktopOutlined, MoonOutlined, SunOutlined } from './icons';
+import { MoonOutlined, SunOutlined } from './icons';
 import { Button } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -100,9 +100,8 @@ export function useThemeController() {
 export function ThemeToggleButton() {
   const { mode, effectiveTheme, cycleMode } = useThemeController();
   const icon = useMemo(() => {
-    if (mode === 'system') return <DesktopOutlined />;
     return effectiveTheme === 'dark' ? <MoonOutlined /> : <SunOutlined />;
-  }, [effectiveTheme, mode]);
+  }, [effectiveTheme]);
   return (
     <Button
       type="text"

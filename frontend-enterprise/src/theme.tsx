@@ -100,9 +100,8 @@ export function useThemeController() {
 export function ThemeToggleButton() {
   const { mode, effectiveTheme, cycleMode } = useThemeController();
   const icon = useMemo(() => {
-    if (mode === 'system') return <SunOutlined />;
     return effectiveTheme === 'dark' ? <MoonOutlined /> : <SunOutlined />;
-  }, [effectiveTheme, mode]);
+  }, [effectiveTheme]);
   return (
     <Button
       type="text"

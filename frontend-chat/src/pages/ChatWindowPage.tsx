@@ -2856,7 +2856,7 @@ export default function ChatWindowPage() {
           </div>
         </div>
         <button type="button" className="sidebar-bottom-link" onClick={() => { window.location.href = '/enterprise/dashboard'; }}>
-          <StaffdeckIcon name="grid" />
+          <StaffdeckIcon name="chat" />
           <span>管理端</span>
           <StaffdeckIcon name="arrow" />
         </button>
@@ -2874,12 +2874,9 @@ export default function ChatWindowPage() {
             <ThemeToggleButton />
             <Button
               className="icon-button"
-              icon={<StaffdeckIcon name="logout" />}
-              aria-label="退出登录"
-              onClick={() => {
-                clearAuthSession();
-                navigate('/login', { replace: true });
-              }}
+              icon={<StaffdeckIcon name="refresh" />}
+              aria-label="刷新页面"
+              onClick={() => window.location.reload()}
             />
           </div>
         </div>

@@ -17,6 +17,8 @@ Browser QA summary:
 - Layout checks passed: no horizontal overflow, no visible error toast, no pageerror, key 1440x900 chat dimensions matched SD1 (`72/220` sidebar, `56` header, `570` empty state, `1078/960 x 100` composer).
 - Chat polling was constrained to current/running sessions to prevent request storms and stacked `Failed to fetch` errors.
 - Enterprise knowledge page now suppresses non-visible OKF version probes during automatic page load.
+- Follow-up in-app browser checks matched SD1 top-right actions (`sun`/`refresh`), collapsed chat bottom icon, and composer shallow border/shadow.
+- Dark-mode checks verified enterprise dashboard/agents and chat surfaces all invert their main content areas, not only the sidebars.
 
 Automated checks:
 - `npm --prefix frontend-chat run build` -> passed
