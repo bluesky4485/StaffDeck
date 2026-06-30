@@ -12670,12 +12670,12 @@ body,
 }
 
 .sd1-agents-search {
-  width: calc(100% - 147px);
+  width: min(994px, calc(100% - 147px));
   height: 50px;
 }
 
 .app-shell.sidebar-expanded .sd1-agents-search {
-  width: calc(100% - 130px);
+  width: min(994px, calc(100% - 130px));
 }
 
 .sd1-agents-search .ant-input-affix-wrapper {
