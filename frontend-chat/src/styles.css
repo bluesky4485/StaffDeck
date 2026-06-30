@@ -6229,6 +6229,15 @@ body,
     display: none !important;
   }
 
+  .session-pane .sidebar-bottom-link {
+    width: 40px !important;
+    min-height: 40px !important;
+    grid-template-columns: 1fr !important;
+    place-items: center !important;
+    padding: 0 !important;
+    border-radius: 12px !important;
+  }
+
   .composer-v2,
   .chat-layout.sidebar-collapsed .composer-v2 {
     width: min(760px, calc(100% - 56px)) !important;
@@ -6248,6 +6257,11 @@ body,
   .session-pane,
   .chat-layout.sidebar-collapsed .session-pane {
     padding: 8px 14px !important;
+  }
+
+  .session-pane .brand-block,
+  .chat-layout.sidebar-collapsed .brand-block {
+    transform: translateX(18px) !important;
   }
 
   .chat-header {
