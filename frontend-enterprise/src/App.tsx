@@ -350,6 +350,23 @@ function Shell({
           </button>
         </div>
 
+          {isAdmin && (
+            <div className="sd1-rail-system">
+              <span className="sd1-rail-label">
+                <span className="sd1-rail-label-collapsed">系统</span>
+                <span className="sd1-rail-label-expanded">系统管理</span>
+              </span>
+              <button type="button" className={`sd1-rail-icon ${selected === '/enterprise/accounts' ? 'active' : ''}`} title="账号管理" onClick={() => navigate('/enterprise/accounts')}>
+                <StaffdeckIcon name="user" />
+                <span className="sd1-rail-menu-text">账号管理</span>
+              </button>
+              <button type="button" className={`sd1-rail-icon ${selected === '/enterprise/models' ? 'active' : ''}`} title="模型配置" onClick={() => navigate('/enterprise/models')}>
+                <StaffdeckIcon name="model" />
+                <span className="sd1-rail-menu-text">模型配置</span>
+              </button>
+            </div>
+          )}
+
           <div className="sd1-rail-employee">
             {sidebarAgent ? (
               <Dropdown
@@ -451,22 +468,6 @@ function Shell({
               <StaffdeckIcon name="tool" />
               <span className="sd1-rail-menu-text">工具</span>
             </button>
-            {isAdmin && (
-              <>
-                <span className="sd1-rail-label">
-                  <span className="sd1-rail-label-collapsed">系统</span>
-                  <span className="sd1-rail-label-expanded">系统管理</span>
-                </span>
-                <button type="button" className={`sd1-rail-icon ${selected === '/enterprise/accounts' ? 'active' : ''}`} title="账号管理" onClick={() => navigate('/enterprise/accounts')}>
-                  <StaffdeckIcon name="user" />
-                  <span className="sd1-rail-menu-text">账号管理</span>
-                </button>
-                <button type="button" className={`sd1-rail-icon ${selected === '/enterprise/models' ? 'active' : ''}`} title="模型配置" onClick={() => navigate('/enterprise/models')}>
-                  <StaffdeckIcon name="model" />
-                  <span className="sd1-rail-menu-text">模型配置</span>
-                </button>
-              </>
-            )}
           </div>
 
           <button type="button" className="sd1-rail-chat" title="聊天端" onClick={() => { window.location.href = '/chat/'; }}>

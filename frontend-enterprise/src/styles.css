@@ -11595,7 +11595,8 @@ body,
 
 .sd1-sidebar.is-expanded .sd1-rail {
   width: 220px;
-  align-items: stretch;
+  align-items: center;
+  padding: 92px 20px 86px;
 }
 
 .sd1-rail button {
@@ -11698,13 +11699,34 @@ body,
 }
 
 .sd1-sidebar.is-expanded .sd1-rail-primary {
-  position: absolute;
-  left: 20px;
-  top: 92px;
+  position: static;
   width: 180px;
   margin: 0;
   padding: 0 0 18px;
   gap: 18px;
+}
+
+.sd1-rail-system {
+  width: 44px;
+  margin-top: 18px;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 0 6px 18px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.sd1-sidebar.is-expanded .sd1-rail-system {
+  width: 156px;
+  margin: 16px 0 0;
+  padding: 0 0 14px;
+  display: block;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.sd1-sidebar.is-expanded .sd1-rail-system .sd1-rail-icon {
+  width: 130px;
+  margin-left: 12px;
 }
 
 .sd1-rail-employee {
@@ -11725,16 +11747,29 @@ body,
   overflow-x: hidden;
 }
 
+.sd1-rail:has(.sd1-rail-system) .sd1-rail-employee {
+  height: min(625px, calc(100vh - 486px));
+  overflow-y: auto;
+}
+
+.sd1-rail:has(.sd1-rail-system) .sd1-rail-employee::-webkit-scrollbar {
+  display: none;
+}
+
 .sd1-sidebar.is-expanded .sd1-rail-employee {
-  position: absolute;
-  left: 32px;
-  top: 257px;
+  position: relative;
   width: 156px;
-  height: 406px;
-  margin: 0;
+  height: auto;
+  min-height: 406px;
+  margin: 28px 0 0;
   padding: 0;
   display: block;
   border-radius: 12px;
+  overflow: visible;
+}
+
+.sd1-sidebar.is-expanded .sd1-rail:has(.sd1-rail-system) .sd1-rail-employee {
+  height: auto;
   overflow: visible;
 }
 
@@ -14156,11 +14191,16 @@ body:has(.sd1-scheduled-page) .topbar {
 }
 
 :root[data-theme='dark'] .sd1-rail-primary,
+:root[data-theme='dark'] .sd1-rail-system,
 :root[data-theme='dark'] .sd1-rail-divider {
   border-color: #30333b !important;
 }
 
 :root[data-theme='dark'] .sd1-rail-primary {
+  background-color: transparent !important;
+}
+
+:root[data-theme='dark'] .sd1-rail-system {
   background-color: transparent !important;
 }
 
@@ -14822,6 +14862,7 @@ body:has(.sd1-scheduled-page) .topbar {
     width: 56px !important;
     min-width: 56px !important;
     max-width: 56px !important;
+    padding: 0 !important;
     box-shadow: none !important;
     overflow: hidden !important;
   }
@@ -14851,6 +14892,17 @@ body:has(.sd1-scheduled-page) .topbar {
     overflow: hidden !important;
   }
 
+  .sd1-sidebar.is-expanded .sd1-rail-system {
+    width: 44px !important;
+    margin-top: 18px !important;
+    padding: 0 6px 18px !important;
+    display: grid !important;
+    justify-items: center !important;
+    gap: 4px !important;
+    border-bottom: 1px solid #edf0f4 !important;
+    overflow: hidden !important;
+  }
+
   .sd1-sidebar.is-expanded .sd1-rail-icon,
   .sd1-sidebar.is-expanded .sd1-rail-primary .sd1-rail-icon {
     width: 32px !important;
@@ -14876,6 +14928,11 @@ body:has(.sd1-scheduled-page) .topbar {
     border-radius: 10px !important;
     background: #ffffff !important;
     overflow: hidden !important;
+  }
+
+  .sd1-sidebar.is-expanded .sd1-rail:has(.sd1-rail-system) .sd1-rail-employee {
+    height: min(625px, calc(100vh - 486px)) !important;
+    overflow-y: auto !important;
   }
 
   .sd1-sidebar.is-expanded .sd1-rail-agent {
