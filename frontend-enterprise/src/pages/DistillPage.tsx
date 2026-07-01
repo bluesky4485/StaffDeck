@@ -18,7 +18,7 @@ import {
   UploadOutlined,
   WarningOutlined,
 } from '../icons';
-import { Button, Card, Empty, Input, Modal, Select, Space, Tag, Tooltip, Typography, Upload, message } from 'antd';
+import { Button, Card, Dropdown, Empty, Input, Modal, Space, Tag, Tooltip, Typography, Upload, message } from 'antd';
 import {
   useEffect,
   useMemo,
@@ -464,10 +464,24 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
   const uploadingFile = attachments.some((item) => item.status === 'uploading');
   const readyAttachments = attachments.filter((item) => item.status === 'ready' && item.text?.trim());
   const selectedRewriteModel = modelConfigs.find((item) => item.id === selectedRewriteModelId) || null;
-  const rewriteModelOptions = modelConfigs.map((item) => ({
-    value: item.id,
-    label: `${item.name || item.model}${item.is_default ? '（默认）' : ''}`,
-  }));
+  const rewriteModelMenuItems = modelConfigs.length
+    ? modelConfigs.map((item) => ({
+      key: item.id,
+      label: (
+        <span className="skill-rewrite-model-menu-item">
+          <span>
+            <strong>{item.name || item.model}</strong>
+            <em>{item.is_default ? `${item.model} · 默认` : item.model}</em>
+          </span>
+          {selectedRewriteModelId === item.id && <CheckOutlined />}
+        </span>
+      ),
+    }))
+    : [{
+      key: 'empty',
+      disabled: true,
+      label: <span className="skill-rewrite-model-menu-empty">暂无可用模型</span>,
+    }];
   const allSelected = draft ? selectedPaths.length > 0 && allPaths.every((path) => selectedPaths.includes(path)) : false;
   const toolDescriptions = useMemo(() => buildToolDescriptionMap(tools, messages), [messages, tools]);
   const toolStatuses = useMemo(() => buildToolStatusMap(tools, messages), [messages, tools]);
@@ -1699,24 +1713,6 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
           <Typography.Title level={3}>编辑 SOP</Typography.Title>
         </div>
         <Space>
-          <Select
-            className="skill-rewrite-model-select"
-            size="middle"
-            value={selectedRewriteModelId || undefined}
-            placeholder="改写模型"
-            options={rewriteModelOptions}
-            disabled={loading || modelConfigs.length === 0}
-            popupMatchSelectWidth={260}
-            onChange={(value) => {
-              setSelectedRewriteModelId(value);
-              window.localStorage.setItem(`${DISTILL_REWRITE_MODEL_STORAGE_KEY}:${TENANT_ID}`, value);
-            }}
-          />
-          {selectedRewriteModel && (
-            <Typography.Text type="secondary" className="skill-rewrite-model-meta">
-              {selectedRewriteModel.model}
-            </Typography.Text>
-          )}
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/enterprise/skills')}>
             返回
           </Button>
@@ -1984,6 +1980,26 @@ export default function DistillPage({ active = true, searchParamsOverride }: Dis
                       停止
                     </Button>
                   )}
+                  <Dropdown
+                    trigger={['click']}
+                    menu={{
+                      items: rewriteModelMenuItems,
+                      selectable: false,
+                      onClick: ({ key }) => {
+                        if (key === 'empty') return;
+                        setSelectedRewriteModelId(String(key));
+                        window.localStorage.setItem(`${DISTILL_REWRITE_MODEL_STORAGE_KEY}:${TENANT_ID}`, String(key));
+                      },
+                    }}
+                  >
+                    <Button
+                      className="skill-rewrite-model-button"
+                      disabled={loading || modelConfigs.length === 0}
+                    >
+                      <span>{selectedRewriteModel?.name || selectedRewriteModel?.model || '默认模型'}</span>
+                      <DownOutlined />
+                    </Button>
+                  </Dropdown>
                   <Button
                     type="primary"
                     icon={<SendOutlined />}

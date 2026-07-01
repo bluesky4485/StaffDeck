@@ -4695,18 +4695,6 @@ body.skill-distill-fixed .content {
   flex: 0 0 auto;
 }
 
-.skill-rewrite-model-select {
-  min-width: 180px;
-  max-width: 240px;
-}
-
-.skill-rewrite-model-meta {
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .skill-workbench {
   display: grid;
   width: 100%;
@@ -5482,6 +5470,67 @@ body.skill-distill-fixed .content {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.skill-rewrite-model-button.ant-btn {
+  max-width: 230px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+  background: var(--surface-subtle);
+  box-shadow: none;
+}
+
+.skill-rewrite-model-button.ant-btn > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-rewrite-model-button.ant-btn:hover,
+.skill-rewrite-model-button.ant-btn:focus {
+  color: var(--foreground);
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+
+.skill-rewrite-model-menu-item {
+  min-width: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.skill-rewrite-model-menu-item > span:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.skill-rewrite-model-menu-item strong,
+.skill-rewrite-model-menu-item em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-rewrite-model-menu-item strong {
+  font-size: 13px;
+  color: var(--foreground);
+}
+
+.skill-rewrite-model-menu-item em,
+.skill-rewrite-model-menu-empty {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .skill-source-toolbar {
