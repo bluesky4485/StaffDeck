@@ -401,7 +401,7 @@ function CollapsedSidebar({
         </Tooltip>
       </div>
 
-      <div className="flex w-full flex-col items-center gap-[18px]">
+      <div className="flex w-full flex-col items-center gap-[12px]">
         {primaryItems.map((item) => (
           <CollapsedNavButton
             key={item.route}
