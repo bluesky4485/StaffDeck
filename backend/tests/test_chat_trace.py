@@ -1,7 +1,15 @@
 from datetime import datetime, timedelta
 
-from app.api.chat import _build_turn_traces, _message_turn_ids_from_events, message_read
-from app.db.models import AgentEvent, Message
+from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, SQLModel, create_engine, select
+
+from app.api.chat import (
+    _build_turn_traces,
+    _message_turn_ids_from_events,
+    _persist_chat_turn_cancelled,
+    message_read,
+)
+from app.db.models import AgentEvent, ChatSession, Message
 
 
 def test_turn_trace_uses_router_skill_hint_when_events_have_turn_id() -> None:
@@ -189,6 +197,76 @@ def test_turn_trace_cancel_event_closes_running_status_for_refresh() -> None:
     traces = _build_turn_traces(messages, events, {})
 
     assert traces[0]["completed_at"] == (started_at + timedelta(milliseconds=300)).isoformat()
+    assert all(line["state"] != "running" for line in traces[0]["lines"])
+    assert any(line["id"] == "generation_stopped" and line["text"] == "已停止生成" for line in traces[0]["lines"])
+
+
+def test_cancel_endpoint_persists_terminal_trace_for_client_turn_id() -> None:
+    db = _test_db()
+    started_at = datetime(2026, 7, 4, 9, 5, 0)
+    session_row = ChatSession(id="session_cancel_endpoint", tenant_id="tenant_demo", user_id="user_demo")
+    db.add(session_row)
+    db.add(
+        Message(
+            id="msg_user",
+            tenant_id="tenant_demo",
+            session_id=session_row.id,
+            role="user",
+            content="暂停测试",
+            created_at=started_at,
+        )
+    )
+    db.add(
+        AgentEvent(
+            tenant_id="tenant_demo",
+            session_id=session_row.id,
+            event_type="user_message_received",
+            payload_json={
+                "message_id": "msg_user",
+                "client_turn_id": "turn_local_1",
+                "message": "暂停测试",
+            },
+            created_at=started_at,
+        )
+    )
+    db.add(
+        AgentEvent(
+            tenant_id="tenant_demo",
+            session_id=session_row.id,
+            event_type="stream_status",
+            payload_json={
+                "turn_id": "msg_user",
+                "user_message_id": "msg_user",
+                "phase": "routing",
+                "text": "正在判断用户意图",
+            },
+            created_at=started_at + timedelta(milliseconds=100),
+        )
+    )
+    db.commit()
+
+    assert _persist_chat_turn_cancelled(db, "tenant_demo", session_row, "turn_local_1", "user_demo")
+    db.commit()
+    assert not _persist_chat_turn_cancelled(db, "tenant_demo", session_row, "turn_local_1", "user_demo")
+
+    events = db.exec(
+        select(AgentEvent)
+        .where(AgentEvent.tenant_id == "tenant_demo", AgentEvent.session_id == session_row.id)
+        .order_by(AgentEvent.created_at)
+    ).all()
+    cancel_events = [event for event in events if event.event_type == "stream_cancelled"]
+    assert len(cancel_events) == 1
+    assert cancel_events[0].payload_json["turn_id"] == "msg_user"
+    assert cancel_events[0].payload_json["user_message_id"] == "msg_user"
+    assert cancel_events[0].payload_json["client_turn_id"] == "turn_local_1"
+
+    messages = db.exec(
+        select(Message)
+        .where(Message.tenant_id == "tenant_demo", Message.session_id == session_row.id)
+        .order_by(Message.created_at)
+    ).all()
+    traces = _build_turn_traces(messages, events, {})
+    assert traces[0]["completed_at"] == cancel_events[0].created_at.isoformat()
     assert all(line["state"] != "running" for line in traces[0]["lines"])
     assert any(line["id"] == "generation_stopped" and line["text"] == "已停止生成" for line in traces[0]["lines"])
 
@@ -665,3 +743,13 @@ def test_message_read_uses_metadata_turn_id_when_event_mapping_is_missing() -> N
     )
 
     assert message_read(row).turn_id == "msg_user"
+
+
+def _test_db() -> Session:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine)
+    return Session(engine)

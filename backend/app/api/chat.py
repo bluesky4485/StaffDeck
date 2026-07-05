@@ -736,9 +736,81 @@ def cancel_chat_turn_endpoint(
     db: Session = Depends(get_session),
 ) -> dict[str, bool]:
     _ensure_request_tenant(request.tenant_id, current_user)
-    _ensure_chat_session_available(db, request.tenant_id, current_user.id, session_id)
+    chat_session = _ensure_chat_session_available(db, request.tenant_id, current_user.id, session_id)
     cancel_chat_turn(session_id, request.turn_id)
+    _persist_chat_turn_cancelled(db, request.tenant_id, chat_session, request.turn_id, current_user.id)
+    db.commit()
     return {"ok": True}
+
+
+def _persist_chat_turn_cancelled(
+    db: Session,
+    tenant_id: str,
+    chat_session: ChatSession,
+    requested_turn_id: str,
+    cancelled_by_user_id: str | None = None,
+) -> bool:
+    requested_turn_id = requested_turn_id.strip()
+    if not requested_turn_id:
+        return False
+
+    events = db.exec(
+        select(AgentEvent)
+        .where(AgentEvent.tenant_id == tenant_id, AgentEvent.session_id == chat_session.id)
+        .order_by(AgentEvent.created_at)
+    ).all()
+    message_id = ""
+    client_turn_id = ""
+    for event in reversed(events):
+        if event.event_type != "user_message_received":
+            continue
+        payload = event.payload_json or {}
+        candidate_message_id = str(payload.get("message_id") or payload.get("user_message_id") or "").strip()
+        candidate_client_turn_id = str(payload.get("client_turn_id") or "").strip()
+        if requested_turn_id in {candidate_message_id, candidate_client_turn_id}:
+            message_id = candidate_message_id
+            client_turn_id = candidate_client_turn_id
+            break
+    if not message_id:
+        return False
+
+    for event in events:
+        if event.event_type not in {"assistant_message_created", "stream_cancelled"}:
+            continue
+        payload = event.payload_json or {}
+        event_turn_ids = {
+            str(payload.get("turn_id") or "").strip(),
+            str(payload.get("user_message_id") or "").strip(),
+            str(payload.get("message_id") or "").strip(),
+            str(payload.get("client_turn_id") or "").strip(),
+        }
+        matches_message = bool(message_id and message_id in event_turn_ids)
+        matches_client_turn = bool(client_turn_id and client_turn_id in event_turn_ids)
+        if not matches_message and not matches_client_turn:
+            continue
+        return False
+
+    now = utc_now()
+    db.add(
+        AgentEvent(
+            tenant_id=tenant_id,
+            session_id=chat_session.id,
+            event_type="stream_cancelled",
+            payload_json={
+                "turn_id": message_id,
+                "user_message_id": message_id,
+                "client_turn_id": client_turn_id or None,
+                "phase": "cancelled",
+                "text": "已停止生成",
+                "cancelled_by_user_id": cancelled_by_user_id,
+            },
+            created_at=now,
+        )
+    )
+    chat_session.status = "active"
+    chat_session.updated_at = now
+    db.add(chat_session)
+    return True
 
 
 def _sse(event: object, data: object) -> str:

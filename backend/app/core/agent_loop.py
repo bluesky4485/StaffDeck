@@ -21,6 +21,7 @@ from app.core.router import Router
 from app.core.skill_runtime import SkillRuntime
 from app.core.step_agent import StepAgent
 from app.db.models import (
+    AgentEvent,
     AgentProfile,
     AgentResourceBinding,
     ChatSession,
@@ -1136,6 +1137,31 @@ class AgentLoop:
                 return False
             normalized_client_turn_id = (client_turn_id or request.client_turn_id or "").strip()
             self.db.rollback()
+            existing_cancel = self.db.exec(
+                select(AgentEvent)
+                .where(
+                    AgentEvent.tenant_id == request.tenant_id,
+                    AgentEvent.session_id == chat_session.id,
+                    AgentEvent.event_type == "stream_cancelled",
+                )
+                .order_by(AgentEvent.created_at.desc())
+            ).all()
+            for event in existing_cancel:
+                payload = event.payload_json or {}
+                event_turn_ids = {
+                    str(payload.get("turn_id") or "").strip(),
+                    str(payload.get("user_message_id") or "").strip(),
+                    str(payload.get("message_id") or "").strip(),
+                    str(payload.get("client_turn_id") or "").strip(),
+                }
+                matches_server_turn = user_message_id in event_turn_ids
+                matches_client_turn = bool(normalized_client_turn_id and normalized_client_turn_id in event_turn_ids)
+                if matches_server_turn or matches_client_turn:
+                    clear_chat_turn_cancelled(chat_session.id, user_message_id)
+                    if normalized_client_turn_id:
+                        clear_chat_turn_cancelled(chat_session.id, normalized_client_turn_id)
+                    turn_finalized = True
+                    return True
             self.events.record(
                 request.tenant_id,
                 chat_session.id,

@@ -2924,7 +2924,7 @@ export default function ChatWindowPage() {
     const controller = stream.abortController;
     locallyCancelledSessionIdsRef.current.add(activeConversationId);
     const cancelRequest = cancelledTurnId && !isDraftConversationKey(activeConversationId)
-      ? api.post(`/api/chat/sessions/${activeConversationId}/cancel`, {
+      ? api.postKeepalive(`/api/chat/sessions/${activeConversationId}/cancel`, {
           tenant_id: tenantId,
           turn_id: cancelledTurnId,
         }).catch(() => undefined)
