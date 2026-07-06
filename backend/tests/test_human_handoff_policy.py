@@ -510,6 +510,39 @@ def test_reply_human_handoff_rejects_non_pending_request(monkeypatch):
     assert db.commits == 0
 
 
+def test_reply_human_handoff_rejects_missing_original_session(monkeypatch):
+    handoff = HumanHandoffRequest(
+        id="handoff_missing_session",
+        tenant_id="tenant_demo",
+        session_id="session_missing",
+        assignee_user_id="admin_user",
+        status="pending",
+        pending_question="请人工确认",
+    )
+    db = FakeDb(get_rows={(HumanHandoffRequest, "handoff_missing_session"): handoff})
+    resumed: list[str] = []
+    monkeypatch.setattr(chat_api, "_resume_human_handoff_async", resumed.append)
+
+    with pytest.raises(HTTPException) as exc:
+        chat_api.reply_human_handoff(
+            "handoff_missing_session",
+            chat_api.HumanHandoffReplyRequest(tenant_id="tenant_demo", reply="人工回复不能丢"),
+            current_user=User(
+                id="admin_user",
+                tenant_id="tenant_demo",
+                username="admin",
+                password_hash="x",
+            ),
+            db=db,
+        )
+
+    assert exc.value.status_code == 409
+    assert handoff.status == "pending"
+    assert handoff.human_reply is None
+    assert db.commits == 0
+    assert resumed == []
+
+
 def test_handoff_resume_worker_continues_original_session_once(monkeypatch):
     engine = _test_engine()
     handled_requests: list[ChatTurnRequest] = []

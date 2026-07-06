@@ -1011,6 +1011,9 @@ def reply_human_handoff(
         raise HTTPException(status_code=400, detail="Reply is required")
     if row.status != "pending":
         raise HTTPException(status_code=409, detail="Handoff request is not pending")
+    chat_session = db.get(ChatSession, row.session_id)
+    if not chat_session or chat_session.tenant_id != request.tenant_id:
+        raise HTTPException(status_code=409, detail="Original handoff session is not available")
 
     now = utc_now()
     row.status = "answered"
@@ -1020,29 +1023,27 @@ def reply_human_handoff(
     row.resume_payload_json = {**(row.resume_payload_json or {}), "answered_by_user_id": current_user.id}
     db.add(row)
 
-    chat_session = db.get(ChatSession, row.session_id)
-    if chat_session and chat_session.tenant_id == request.tenant_id:
-        chat_session.status = "active"
-        chat_session.awaiting_input_json = None
-        chat_session.summary = f"最近回复：{reply[:120]}"
-        chat_session.updated_at = now
-        db.add(chat_session)
-        db.add(
-            AgentEvent(
-                tenant_id=request.tenant_id,
-                session_id=row.session_id,
-                event_type="human_handoff_answered",
-                payload_json={
-                    "handoff_id": row.id,
-                    "agent_id": row.agent_id,
-                    "trigger_skill_id": row.trigger_skill_id,
-                    "trigger_step_id": row.trigger_step_id,
-                    "answered_by_user_id": current_user.id,
-                    "reply_preview": reply[:180],
-                },
-                created_at=now,
-            )
+    chat_session.status = "active"
+    chat_session.awaiting_input_json = None
+    chat_session.summary = f"最近回复：{reply[:120]}"
+    chat_session.updated_at = now
+    db.add(chat_session)
+    db.add(
+        AgentEvent(
+            tenant_id=request.tenant_id,
+            session_id=row.session_id,
+            event_type="human_handoff_answered",
+            payload_json={
+                "handoff_id": row.id,
+                "agent_id": row.agent_id,
+                "trigger_skill_id": row.trigger_skill_id,
+                "trigger_step_id": row.trigger_step_id,
+                "answered_by_user_id": current_user.id,
+                "reply_preview": reply[:180],
+            },
+            created_at=now,
         )
+    )
     db.commit()
     db.refresh(row)
     _resume_human_handoff_async(row.id)
