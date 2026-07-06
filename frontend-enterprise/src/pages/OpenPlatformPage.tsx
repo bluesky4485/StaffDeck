@@ -31,6 +31,7 @@ import AppHeader from '@/components/AppHeader';
 import {
   PlatformColumn,
   PlatformEmployeeCard,
+  PlatformEmployeeDrawer,
   PlatformResourceCard,
   type PlatformResourceAccent,
   type PlatformStat,
@@ -361,11 +362,56 @@ export default function OpenPlatformPage({
     }
   }
 
+  function navigateDetailItem(offset: -1 | 1) {
+    if (!detailItem) return;
+    const items = platformItems[detailItem.kind];
+    const currentIndex = items.findIndex((entry) => entry.id === detailItem.item.id);
+    const nextItem = items[currentIndex + offset];
+    if (!nextItem) return;
+    setDetailItem({ kind: detailItem.kind, item: nextItem });
+  }
+
   function renderItemDrawer() {
     if (!detailItem) return null;
     const config = PLATFORM_BY_KIND.get(detailItem.kind) || PLATFORM_CONFIGS[0];
     const { item } = detailItem;
     const deleteKey = platformItemDeleteKey(detailItem.kind, item);
+    const drawerItems = platformItems[detailItem.kind];
+    const drawerIndex = drawerItems.findIndex((entry) => entry.id === item.id);
+
+    if (detailItem.kind === 'agents' && item.agent) {
+      const profile = employeeProfile(item.agent);
+      const detailText = item.agent.persona_prompt
+        || item.agent.description
+        || config.detail;
+      return (
+        <PlatformEmployeeDrawer
+          open
+          agent={item.agent}
+          platformTitle={config.title}
+          name={item.title}
+          role={item.meta}
+          description={item.description}
+          detailText={detailText}
+          workStyles={profile.workStyles}
+          stats={employeeStats(item.agent)}
+          online={item.agent.status === 'active'}
+          canManage={canManagePlatform}
+          deleting={deletingItemKey === deleteKey}
+          hasPrev={drawerIndex > 0}
+          hasNext={drawerIndex >= 0 && drawerIndex < drawerItems.length - 1}
+          onClose={() => setDetailItem(null)}
+          onPrev={() => navigateDetailItem(-1)}
+          onNext={() => navigateDetailItem(1)}
+          onDelete={() => setConfirmTarget({ kind: detailItem.kind, item })}
+          onUse={() => {
+            setDetailItem(null);
+            usePlatformItem(detailItem.kind, item.id);
+          }}
+        />
+      );
+    }
+
     return (
       <Sheet open onOpenChange={(next) => { if (!next) setDetailItem(null); }}>
         <SheetContent

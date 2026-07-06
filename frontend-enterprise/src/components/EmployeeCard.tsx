@@ -114,7 +114,7 @@ export default function EmployeeCard({
             {displayName}
           </strong>
           <span className="truncate text-[10px] text-[#757F9C]">{rawRoleName}</span>
-          <div>
+          <div className="leading-none">
             <span className="inline-flex items-center gap-[2px] py-[2px] px-[4px] text-[8px] font-semibold text-[#757F9C] rounded-[90px] bg-white dark:bg-[#26272d]">
               <i className={cn('size-[6px] shrink-0 rounded-full', online ? 'bg-[#22c55e]' : 'bg-[#9ca3af]')} aria-hidden="true" />
               {online ? '在线' : '下线'}
