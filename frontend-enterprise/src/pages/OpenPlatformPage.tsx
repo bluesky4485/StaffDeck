@@ -500,9 +500,8 @@ export default function OpenPlatformPage({
         onLogout={onLogout}
         userName={currentUser?.username}
         title="开放广场平台"
-        description="汇总数字员工、知识库、技能、SOP 和工具五个广场。先进入广场查看详情，再把需要的能力复制到当前数字员工。"
       />
-      <div className="mx-auto grid w-full max-w-[1648px] grid-cols-1 gap-[12px] sm:grid-cols-2 xl:min-h-0 xl:flex-1 xl:grid-cols-5 xl:grid-rows-1">
+      <div className="mx-auto grid w-full grid-cols-1 gap-[12px] sm:grid-cols-2 xl:min-h-0 xl:flex-1 xl:grid-cols-5 xl:grid-rows-1">
         {platformStats.map((platform) => {
           const items = platformItems[platform.kind];
           const previews = items;
