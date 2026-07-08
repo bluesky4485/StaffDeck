@@ -8,7 +8,7 @@ import httpx
 from sqlmodel import Session, select
 
 from app.config import get_settings
-from app.db.models import Tool
+from app.db.models import MCPServer, Tool
 from app.tools.http_request import prepare_get_request
 from app.tools.mcp_client import MCPClientError, execute_mcp_tool
 from app.tools.tool_schema import ToolCall, ToolError, ToolResult
@@ -71,16 +71,52 @@ class ToolExecutor:
 
     def _execute_mcp_tool(self, tool: Tool, arguments: dict[str, Any]) -> ToolResult:
         try:
+            config, tool_name = self._resolve_mcp_config(tool)
             data = execute_mcp_tool(
-                tool.config_json or {},
+                config,
                 arguments,
                 timeout_seconds=self.settings.tool_timeout_seconds,
+                tool_name=tool_name,
             )
             return ToolResult(tool_name=tool.name, success=True, data=data, error=None)
         except MCPClientError as exc:
             return self._error(tool.name, "MCP_ERROR", str(exc))
         except Exception as exc:
             return self._error(tool.name, "MCP_EXECUTION_ERROR", str(exc))
+
+    def _resolve_mcp_config(self, tool: Tool) -> tuple[dict[str, Any], str | None]:
+        """解析 MCP 工具的连接配置。
+
+        新模型：工具通过 mcp_server_id 关联到 MCPServer，连接配置从
+        server 读取，config_json 里只放 {"tool": <leaf name>}。
+        旧模型：config_json 自带完整连接配置（兼容历史数据）。
+        """
+        tool_config = tool.config_json or {}
+        tool_name = str(tool_config.get("tool") or tool_config.get("tool_name") or "").strip() or None
+        if tool.mcp_server_id:
+            server = self.db.get(MCPServer, tool.mcp_server_id)
+            if server is None:
+                raise MCPClientError("MCP 工具关联的 Server 不存在或已删除。")
+            return self._server_client_config(server), tool_name
+        return dict(tool_config), tool_name
+
+    def _server_client_config(self, server: MCPServer) -> dict[str, Any]:
+        transport = server.transport or "streamable_http"
+        config: dict[str, Any] = {"transport": transport}
+        if transport in {"streamable_http", "sse"}:
+            config["url"] = server.url or ""
+            if server.headers_json:
+                config["headers"] = dict(server.headers_json)
+        elif transport == "stdio":
+            config["command"] = server.command or ""
+            config["args"] = list(server.args_json or [])
+            if server.env_json:
+                config["env"] = dict(server.env_json)
+            if server.cwd:
+                config["cwd"] = server.cwd
+        elif transport == "builtin":
+            config["server"] = "builtin.demo"
+        return config
 
     def _response_data(self, response: httpx.Response) -> Any:
         try:

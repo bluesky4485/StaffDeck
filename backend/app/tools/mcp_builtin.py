@@ -36,3 +36,63 @@ def execute_builtin_mcp(config: dict[str, Any], arguments: dict[str, Any]) -> An
 
 def builtin_mcp_tool_names() -> list[str]:
     return ["echo", "sum", "product_lookup"]
+
+
+_BUILTIN_TOOL_DEFINITIONS: list[dict[str, Any]] = [
+    {
+        "name": "echo",
+        "description": "回显输入文本并返回其长度。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"text": {"type": "string", "description": "要回显的文本"}},
+            "required": ["text"],
+        },
+        "outputSchema": {
+            "type": "object",
+            "properties": {"text": {"type": "string"}, "length": {"type": "integer"}},
+        },
+    },
+    {
+        "name": "sum",
+        "description": "对一组数字求和。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"numbers": {"type": "array", "items": {"type": "number"}}},
+            "required": ["numbers"],
+        },
+        "outputSchema": {
+            "type": "object",
+            "properties": {
+                "numbers": {"type": "array"},
+                "total": {"type": "number"},
+                "count": {"type": "integer"},
+            },
+        },
+    },
+    {
+        "name": "product_lookup",
+        "description": "查询 demo 商品价格数据。",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"product_id": {"type": "string", "description": "商品 ID，例如 A1 或 A3"}},
+            "required": ["product_id"],
+        },
+        "outputSchema": {
+            "type": "object",
+            "properties": {
+                "found": {"type": "boolean"},
+                "product_id": {"type": "string"},
+                "display_name": {"type": "string"},
+                "price": {"type": "number"},
+                "currency": {"type": "string"},
+            },
+        },
+    },
+]
+
+
+def builtin_mcp_tool_definitions(config: dict[str, Any]) -> list[dict[str, Any]]:
+    server = str(config.get("server") or config.get("server_id") or "builtin.demo").strip()
+    if server != "builtin.demo":
+        raise BuiltinMCPError(f"不支持的内置 MCP server：{server or '<empty>'}")
+    return [dict(item) for item in _BUILTIN_TOOL_DEFINITIONS]

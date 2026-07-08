@@ -58,8 +58,8 @@ const HEAD_CELL_CLASS =
   'h-[36px] bg-[#f2f3f7] px-[16px] py-[12px] align-middle text-[12px] font-normal text-[#464c5e]';
 const BODY_CELL_CLASS = 'px-[16px] py-[12px] align-middle text-[12px] text-[#858b9c]';
 const BODY_HEIGHT = {
-  default: 'h-[64px]',
-  compact: 'h-[46px]',
+  default: 'min-h-[64px]',
+  compact: 'min-h-[46px]',
 } as const;
 const CELL_BORDER = 'border border-[#f2f3f7]';
 

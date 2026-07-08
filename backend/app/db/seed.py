@@ -18,6 +18,7 @@ from app.db.models import (
     GeneralSkill,
     KnowledgeBase,
     KnowledgeBaseVersion,
+    MCPServer,
     ModelConfig,
     PersonaConfig,
     Skill,
@@ -628,68 +629,90 @@ PRODUCT_PRICE_QUERY_TOOL = {
     "enabled": True,
 }
 
-MCP_DEMO_ECHO_TOOL = {
-    "name": "mcp.demo_echo",
-    "display_name": "MCP Demo Echo",
-    "description": "内置 MCP demo 工具，模拟 MCP server 的 echo tool，用于验证 MCP 工具配置、测试和 Agent 调用链路。",
+MOCK_MCP_STDIO_SERVER = Path(__file__).resolve().parents[2] / "mock_servers" / "mcp_stdio_server.py"
+
+# --------------------------------------------------------------------------- #
+# MCP Servers（工具集）与其发现出的子工具
+# --------------------------------------------------------------------------- #
+
+MCP_BUILTIN_DEMO_SERVER = {
+    "name": "builtin_demo",
+    "display_name": "内置 Demo MCP",
+    "description": "内置 MCP demo server，用于验证 MCP 工具集的连接、发现与调用链路。",
     "bucket": "MCP 工具",
-    "tool_type": "mcp",
-    "method": "POST",
-    "url": "mcp://builtin.demo/echo",
+    "transport": "builtin",
+    "url": None,
     "headers_json": {},
-    "auth_json": {},
-    "config_json": {"server": "builtin.demo", "tool": "echo"},
-    "input_schema": {
-        "type": "object",
-        "properties": {"text": {"type": "string", "description": "要回显的文本", "example": "hello mcp"}},
-        "required": ["text"],
-    },
-    "output_schema": {
-        "type": "object",
-        "properties": {
-            "text": {"type": "string"},
-            "length": {"type": "integer"},
-        },
-    },
-    "allowed_skills_json": [],
+    "command": None,
+    "args_json": [],
+    "env_json": {},
+    "cwd": None,
     "enabled": True,
 }
 
-MOCK_MCP_STDIO_SERVER = Path(__file__).resolve().parents[2] / "mock_servers" / "mcp_stdio_server.py"
-
-MCP_STDIO_PRODUCT_LOOKUP_TOOL = {
-    "name": "mcp.stdio_product_lookup",
-    "display_name": "MCP Stdio 商品查询",
-    "description": "真实 stdio MCP mock server 工具，用于验证 MCP client transport、初始化和 tools/call 链路。",
+MCP_STDIO_DEMO_SERVER = {
+    "name": "stdio_demo",
+    "display_name": "Stdio Demo MCP",
+    "description": "真实 stdio MCP mock server，用于验证 MCP client transport、初始化和 tools/list、tools/call 链路。",
     "bucket": "MCP 工具",
-    "tool_type": "mcp",
-    "method": "POST",
-    "url": "mcp://stdio/mock/product_lookup",
+    "transport": "stdio",
+    "url": None,
     "headers_json": {},
-    "auth_json": {},
-    "config_json": {
-        "transport": "stdio",
-        "command": sys.executable,
-        "args": [str(MOCK_MCP_STDIO_SERVER)],
-        "tool": "product_lookup",
-    },
-    "input_schema": {
-        "type": "object",
-        "properties": {"product_id": {"type": "string", "description": "商品 ID，例如 A1 或 A3"}},
-        "required": ["product_id"],
-    },
-    "output_schema": {
-        "type": "object",
-        "properties": {
-            "found": {"type": "boolean"},
-            "product_id": {"type": "string"},
-            "display_name": {"type": "string"},
-            "price": {"type": "number"},
-            "currency": {"type": "string"},
-        },
-    },
-    "allowed_skills_json": ["skill_price_compare_001", "skill_graph_visual_demo"],
+    "command": sys.executable,
+    "args_json": [str(MOCK_MCP_STDIO_SERVER)],
+    "env_json": {},
+    "cwd": None,
     "enabled": True,
+}
+
+MCP_SERVERS = (
+    MCP_BUILTIN_DEMO_SERVER,
+    MCP_STDIO_DEMO_SERVER,
+)
+
+# 每个 MCP server 预先落地的子工具（模拟已执行过一次「发现/同步」）。
+# config_json 只放 leaf tool 名，连接配置由 mcp_server_id 关联的 server 提供。
+MCP_SERVER_TOOLS = {
+    "builtin_demo": [
+        {
+            "leaf": "echo",
+            "display_name": "MCP Demo Echo",
+            "description": "内置 MCP demo echo 工具，回显文本并返回长度。",
+            "input_schema": {
+                "type": "object",
+                "properties": {"text": {"type": "string", "description": "要回显的文本", "example": "hello mcp"}},
+                "required": ["text"],
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {"text": {"type": "string"}, "length": {"type": "integer"}},
+            },
+            "allowed_skills_json": [],
+        },
+    ],
+    "stdio_demo": [
+        {
+            "leaf": "product_lookup",
+            "display_name": "MCP Stdio 商品查询",
+            "description": "stdio MCP mock server 的商品查询工具。",
+            "input_schema": {
+                "type": "object",
+                "properties": {"product_id": {"type": "string", "description": "商品 ID，例如 A1 或 A3"}},
+                "required": ["product_id"],
+            },
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "found": {"type": "boolean"},
+                    "product_id": {"type": "string"},
+                    "display_name": {"type": "string"},
+                    "price": {"type": "number"},
+                    "currency": {"type": "string"},
+                },
+            },
+            "allowed_skills_json": ["skill_price_compare_001", "skill_graph_visual_demo"],
+        },
+    ],
 }
 
 DEMO_TOOLS = (
@@ -698,14 +721,63 @@ DEMO_TOOLS = (
     PRODUCT_PURCHASE_TOOL,
     ORDER_ADD_TOOL,
     PRODUCT_PRICE_QUERY_TOOL,
-    MCP_DEMO_ECHO_TOOL,
-    MCP_STDIO_PRODUCT_LOOKUP_TOOL,
 )
 DEFAULT_PERSONA_PROMPT = (
     "你是面壁智能的智能客服，语气专业、清晰、友好。"
     "你需要先理解用户诉求，再基于已配置的技能和工具帮助用户完成业务办理。"
     "不要暴露内部路由、技能 ID、步骤 ID 或工具实现细节。"
 )
+
+
+def _seed_mcp_servers(session: Session) -> None:
+    """落地 demo MCP server（工具集）及其已发现的子工具。"""
+    for server_config in MCP_SERVERS:
+        server = session.exec(
+            select(MCPServer).where(
+                MCPServer.tenant_id == "tenant_demo", MCPServer.name == server_config["name"]
+            )
+        ).first()
+        if not server:
+            server = MCPServer(tenant_id="tenant_demo", **server_config)
+            session.add(server)
+            session.flush()
+        else:
+            for key, value in server_config.items():
+                setattr(server, key, value)
+            server.updated_at = utc_now()
+            session.add(server)
+
+        for tool_def in MCP_SERVER_TOOLS.get(server_config["name"], []):
+            leaf = tool_def["leaf"]
+            scoped_name = f"{server.name}.{leaf}"
+            tool = session.exec(
+                select(Tool).where(Tool.tenant_id == "tenant_demo", Tool.name == scoped_name)
+            ).first()
+            payload = {
+                "display_name": tool_def.get("display_name") or leaf,
+                "description": tool_def.get("description") or "",
+                "bucket": server.bucket or "MCP 工具",
+                "tool_type": "mcp",
+                "method": "POST",
+                "url": f"mcp://{server.name}/{leaf}",
+                "headers_json": {},
+                "auth_json": {},
+                "config_json": {"tool": leaf},
+                "input_schema": tool_def.get("input_schema") or {},
+                "output_schema": tool_def.get("output_schema") or {},
+                "allowed_skills_json": tool_def.get("allowed_skills_json") or [],
+                "mcp_server_id": server.id,
+                "enabled": True,
+            }
+            if not tool:
+                session.add(Tool(tenant_id="tenant_demo", name=scoped_name, **payload))
+            else:
+                for key, value in payload.items():
+                    setattr(tool, key, value)
+                tool.updated_at = utc_now()
+                session.add(tool)
+        server.last_synced_at = utc_now()
+        session.add(server)
 
 
 def seed_demo_data(session: Session) -> None:
@@ -783,6 +855,7 @@ def seed_demo_data(session: Session) -> None:
             tool.updated_at = utc_now()
             session.add(tool)
 
+    _seed_mcp_servers(session)
     _backfill_demo_agent_tools(session)
     _seed_weather_general_skill(session)
     session.flush()

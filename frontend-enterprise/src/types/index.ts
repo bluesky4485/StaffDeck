@@ -351,10 +351,62 @@ export type ToolRead = {
   input_schema: Record<string, unknown>;
   output_schema: Record<string, unknown>;
   allowed_skills: string[];
+  mcp_server_id?: string | null;
   enabled: boolean;
   metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
+};
+
+export type MCPTransport = 'stdio' | 'streamable_http' | 'sse' | 'builtin';
+
+export type MCPServerConnection = {
+  transport: MCPTransport;
+  url?: string | null;
+  headers: Record<string, string>;
+  command?: string | null;
+  args: string[];
+  env: Record<string, string>;
+  cwd?: string | null;
+};
+
+export type MCPServerRead = {
+  id: string;
+  tenant_id: string;
+  name: string;
+  display_name?: string;
+  description?: string;
+  bucket: string;
+  connection: MCPServerConnection;
+  enabled: boolean;
+  last_synced_at?: string | null;
+  tool_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type MCPDiscoveredTool = {
+  name: string;
+  description: string;
+  input_schema: Record<string, unknown>;
+  output_schema: Record<string, unknown>;
+  imported: boolean;
+  tool_id?: string | null;
+  enabled?: boolean | null;
+};
+
+export type MCPDiscoverResponse = {
+  success: boolean;
+  tools: MCPDiscoveredTool[];
+  error?: { code: string; message: string } | null;
+};
+
+export type MCPSyncResponse = {
+  success: boolean;
+  imported: string[];
+  updated: string[];
+  removed: string[];
+  error?: { code: string; message: string } | null;
 };
 
 export type ScheduledTaskRead = {

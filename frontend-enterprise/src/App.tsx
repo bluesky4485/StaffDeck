@@ -49,6 +49,8 @@ import {
   ScheduledTaskNewPage,
 } from "./pages/Dashboard/ScheduledTasksTab";
 import ToolsPage, {
+  McpServerEditPage,
+  McpServerNewPage,
   ToolEditPage,
   ToolNewPage,
   ToolTestPage,
@@ -603,6 +605,24 @@ function Shell({
                 path="/enterprise/tools/new"
                 element={
                   <ToolNewPage currentUser={auth.user} onLogout={onLogout} />
+                }
+              />
+              <Route
+                path="/enterprise/tools/mcp/new"
+                element={
+                  <McpServerNewPage
+                    currentUser={auth.user}
+                    onLogout={onLogout}
+                  />
+                }
+              />
+              <Route
+                path="/enterprise/tools/mcp/:serverId/edit"
+                element={
+                  <McpServerEditPage
+                    currentUser={auth.user}
+                    onLogout={onLogout}
+                  />
                 }
               />
               <Route

@@ -109,6 +109,8 @@ def _migrate_sqlite_skill_schema() -> None:
                     conn.execute(text(f"UPDATE tools SET allowed_skills_json = {legacy_allowed_column}"))
                 else:
                     conn.execute(text("UPDATE tools SET allowed_skills_json = '[]'"))
+            if "mcp_server_id" not in tool_columns:
+                conn.execute(text("ALTER TABLE tools ADD COLUMN mcp_server_id VARCHAR"))
 
         if "ui_configs" in tables:
             ui_columns = {column["name"] for column in inspector.get_columns("ui_configs")}
