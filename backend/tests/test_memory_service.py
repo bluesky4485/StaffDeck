@@ -1,7 +1,8 @@
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from app.db.models import ChatSession, MemoryRecord, ModelConfig
+from app.api.memories import clear_my_memories
+from app.db.models import ChatSession, MemoryRecord, ModelConfig, Tenant, User
 from app.llm.client import LLMClient
 from app.memory.service import MemoryService, memory_rows_for_read
 from app.session.session_schema import ChatTurnRequest, StepAgentResult
@@ -178,6 +179,78 @@ def test_memory_rows_for_read_hides_legacy_duplicate_profile_and_raw_summary() -
     visible = memory_rows_for_read(rows)
 
     assert [row.content for row in visible] == ["用户姓名/称呼：hm"]
+
+
+def test_clear_my_memories_scopes_to_current_user_and_agent() -> None:
+    with _test_session() as db:
+        user = User(
+            id="user_demo",
+            tenant_id="tenant_demo",
+            username="user_demo",
+            password_hash="hash",
+        )
+        db.add(Tenant(id="tenant_demo", name="Demo"))
+        db.add(user)
+        db.add(ChatSession(id="session_agent_a", tenant_id="tenant_demo", user_id="user_demo", agent_id="agent_a"))
+        db.add_all(
+            [
+                MemoryRecord(
+                    tenant_id="tenant_demo",
+                    user_id="user_demo",
+                    username="user_demo",
+                    session_id="session_direct",
+                    kind="profile",
+                    content="当前用户 agent_a 直接记忆",
+                    metadata_json={"agent_id": "agent_a"},
+                ),
+                MemoryRecord(
+                    tenant_id="tenant_demo",
+                    user_id="user_demo",
+                    username="user_demo",
+                    session_id="session_agent_a",
+                    kind="preference",
+                    content="当前用户 agent_a 会话推断记忆",
+                ),
+                MemoryRecord(
+                    tenant_id="tenant_demo",
+                    user_id="user_demo",
+                    username="user_demo",
+                    session_id="session_other_agent",
+                    kind="fact",
+                    content="当前用户其他员工记忆",
+                    metadata_json={"agent_id": "agent_b"},
+                ),
+                MemoryRecord(
+                    tenant_id="tenant_demo",
+                    user_id="other_user",
+                    username="other_user",
+                    session_id="session_agent_a",
+                    kind="profile",
+                    content="其他用户同员工记忆",
+                    metadata_json={"agent_id": "agent_a"},
+                ),
+                MemoryRecord(
+                    tenant_id="tenant_demo",
+                    user_id="user_demo",
+                    username="user_demo",
+                    session_id="session_agent_a",
+                    kind="conversation",
+                    content="原始对话记录不清理",
+                    metadata_json={"agent_id": "agent_a"},
+                ),
+            ]
+        )
+        db.commit()
+
+        result = clear_my_memories("tenant_demo", "agent_a", user, db)
+        remaining = list(db.exec(select(MemoryRecord).order_by(MemoryRecord.content)).all())
+
+    assert result == {"deleted": 2}
+    assert [row.content for row in remaining] == [
+        "其他用户同员工记忆",
+        "原始对话记录不清理",
+        "当前用户其他员工记忆",
+    ]
 
 
 def _test_session() -> Session:

@@ -41,6 +41,7 @@ export default function MemoriesTab() {
   const [rows, setRows] = useState<MemoryRead[]>([]);
   const [detail, setDetail] = useState<MemoryUserGroup | null>(null);
   const [loading, setLoading] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [agentId, setAgentId] = useState(
     () => window.localStorage.getItem(ENTERPRISE_AGENT_STORAGE_KEY) || '',
   );
@@ -90,6 +91,26 @@ export default function MemoriesTab() {
   function resetFilter() {
     setFilter(EMPTY_FILTER);
     void load(EMPTY_FILTER);
+  }
+
+  async function clearOwnMemories() {
+    const scopeText = agentId ? '当前员工下你的长期记忆' : '当前租户下你的长期记忆';
+    if (!window.confirm(`将清空${scopeText}，不会影响其他用户。确定继续？`)) {
+      return;
+    }
+    setClearing(true);
+    try {
+      const params = new URLSearchParams({ tenant_id: TENANT_ID });
+      if (agentId) params.set('agent_id', agentId);
+      const result = await api.delete<{ deleted: number }>(`/api/enterprise/memories/me?${params.toString()}`);
+      notify.success(result.deleted > 0 ? `已清空 ${result.deleted} 条记忆` : '没有可清空的记忆');
+      setDetail(null);
+      await load(filter);
+    } catch (error) {
+      notify.error(error instanceof Error ? error.message : '清空失败');
+    } finally {
+      setClearing(false);
+    }
   }
 
   const columns: DataTableColumn<MemoryUserGroup>[] = [
@@ -233,6 +254,15 @@ export default function MemoriesTab() {
             >
               <IconRefresh className={cn('size-[14px]', loading && 'animate-spin')} />
               重置
+            </UIButton>
+            <UIButton
+              type="button"
+              variant="outline"
+              onClick={clearOwnMemories}
+              disabled={loading || clearing}
+              className="h-[34px] w-[112px] rounded-[10px] border-[0.5px] border-[#f0d3d3] bg-white px-[16px] text-[12px] font-normal text-[#c43d3d] hover:border-[#e1a8a8] hover:bg-[#fff7f7] hover:text-[#a92d2d]"
+            >
+              {clearing ? '清空中' : '清空我的记忆'}
             </UIButton>
           </form>
 

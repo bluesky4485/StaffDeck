@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.db.models import ChatSession, MemoryRecord
+from app.db.models import ChatSession, MemoryRecord, User
 from app.memory.service import memory_agent_id, memory_matches_agent, memory_read, memory_rows_for_read
+from app.security.auth import get_current_user
 from app.security.tenant import ensure_tenant
 
 
@@ -41,6 +42,37 @@ def list_memories(
         needle = q.strip().lower()
         rows = [row for row in rows if needle in row.content.lower() or needle in (row.username or "").lower()]
     return [_memory_read_with_inferred_agent(row, session_agents) for row in rows]
+
+
+@router.delete("/me")
+def clear_my_memories(
+    tenant_id: str = Query(...),
+    agent_id: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_session),
+) -> dict:
+    if tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=403, detail="Tenant mismatch")
+    ensure_tenant(db, tenant_id)
+    rows = list(
+        db.exec(
+            select(MemoryRecord)
+            .where(
+                MemoryRecord.tenant_id == tenant_id,
+                MemoryRecord.user_id == current_user.id,
+                MemoryRecord.kind != "conversation",
+            )
+            .order_by(MemoryRecord.updated_at.desc())
+        ).all()
+    )
+    session_agents = _session_agent_map(db, rows) if agent_id else {}
+    if agent_id:
+        rows = [row for row in rows if _memory_matches_agent(row, agent_id, session_agents)]
+    deleted = len(rows)
+    for row in rows:
+        db.delete(row)
+    db.commit()
+    return {"deleted": deleted}
 
 
 def _session_agent_map(db: Session, rows: list[MemoryRecord]) -> dict[str, str | None]:
