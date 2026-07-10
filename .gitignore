@@ -15,6 +15,12 @@ exports/
 dist/
 build/
 node_modules/
+# 打包产物（PyInstaller 输出、附带 python、下载缓存）—— 不进 git
+packaging/out/
+packaging/build/
+packaging/runtime/
+packaging/runtime_dl/
+packaging/_win_reqs.txt
 *.tsbuildinfo
 *.egg-info/
 sop_agent_loop.db
@@ -29,3 +35,4 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+packaging/assets/staffdeck.iconset/

@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from app import paths
 from app.db.models import ChatSession, ModelConfig, Skill, Tool
 from app.llm import LLMClient, LLMError
 from app.session.session_schema import RouterDecision, StepAgentResult
 
 
-PROMPT_PATH = Path(__file__).resolve().parents[1] / "llm" / "prompts" / "step_agent_prompt.md"
+PROMPT_PATH = paths.resource_dir() / "app" / "llm" / "prompts" / "step_agent_prompt.md"
 INTERNAL_SCHEDULER_SLOT_KEYS = {"_graph_pending_steps"}
 
 

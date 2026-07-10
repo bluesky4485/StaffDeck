@@ -7,14 +7,15 @@ from typing import Any
 
 from sqlmodel import Session, select
 
+from app import paths
 from app.db.models import ChatSession, MemoryRecord, ModelConfig, Tool, User, utc_now
 from app.llm import LLMClient
 from app.session.session_schema import ChatTurnRequest, StepAgentResult
 from app.tools.tool_schema import ToolResult
 
 
-PROMPT_PATH = Path(__file__).resolve().parents[1] / "llm" / "prompts" / "memory_extractor_prompt.md"
-RERANK_PROMPT_PATH = Path(__file__).resolve().parents[1] / "llm" / "prompts" / "memory_reranker_prompt.md"
+PROMPT_PATH = paths.resource_dir() / "app" / "llm" / "prompts" / "memory_extractor_prompt.md"
+RERANK_PROMPT_PATH = paths.resource_dir() / "app" / "llm" / "prompts" / "memory_reranker_prompt.md"
 MEMORY_SOURCE = "model_memory_extractor"
 PROFILE_NAME_KEY = "preferred_name"
 ALLOWED_MEMORY_KINDS = {"profile", "preference", "fact"}

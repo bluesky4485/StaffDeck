@@ -5,11 +5,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeVar
 
+from app import paths
 from app.llm import LLMClient, LLMError
 from app.skills.skill_schema import SkillCard, ToolSuggestion
 
 
-PROMPT_PATH = Path(__file__).resolve().parents[1] / "llm" / "prompts" / "skill_reflection_prompt.md"
+PROMPT_PATH = paths.resource_dir() / "app" / "llm" / "prompts" / "skill_reflection_prompt.md"
 MAX_REFLECTION_ROUNDS = 3
 RUBRIC_LABELS: dict[str, str] = {
     "source_alignment": "来源一致性",

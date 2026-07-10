@@ -4,6 +4,7 @@ import re
 from collections.abc import Iterator
 from pathlib import Path
 
+from app import paths
 from app.db.models import ChatSession, ModelConfig, Skill
 from app.knowledge.citations import knowledge_citations_from_results
 from app.llm import LLMClient
@@ -11,7 +12,7 @@ from app.session.session_schema import RouterDecision, StepAgentResult
 from app.tools.tool_schema import ToolResult
 
 
-PROMPT_PATH = Path(__file__).resolve().parents[1] / "llm" / "prompts" / "response_generator_prompt.md"
+PROMPT_PATH = paths.resource_dir() / "app" / "llm" / "prompts" / "response_generator_prompt.md"
 FALLBACK_REPLY = "抱歉，我暂时无法处理这个问题。您可以换个说法，或者我可以帮您转人工。"
 MODEL_FAILURE_SUGGESTION = "请检查模型配置、API Key、网络或模型服务状态后重试。"
 TOOL_FAILURE_SUGGESTION = "请检查工具配置、调用参数或外部服务状态后重试。"

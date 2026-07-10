@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import delete
 from sqlmodel import Session, select
 
+from app import paths
 from app.db import engine
 from app.db.models import (
     KnowledgeBucket,
@@ -43,7 +44,7 @@ from app.llm import LLMClient, LLMError
 from app.skills.skill_schema import SkillCard
 
 
-PROMPT_DIR = Path(__file__).resolve().parents[1] / "llm" / "prompts"
+PROMPT_DIR = paths.resource_dir() / "app" / "llm" / "prompts"
 BUCKET_PROMPT = PROMPT_DIR / "knowledge_bucket_prompt.md"
 DISCOVERY_PROMPT = PROMPT_DIR / "knowledge_discovery_prompt.md"
 SEARCH_PROMPT = PROMPT_DIR / "knowledge_search_prompt.md"

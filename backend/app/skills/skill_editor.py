@@ -6,6 +6,7 @@ import re
 from time import sleep
 from typing import Any, Iterator
 
+from app import paths
 from app.db.models import ModelConfig
 from app.llm import LLMClient, LLMError
 from app.skills.llm_limits import skill_model_config
@@ -21,7 +22,7 @@ from app.skills.skill_distiller import (
 from app.skills.step_ids import skill_card_with_unique_step_ids
 
 
-PROMPT_PATH = Path(__file__).resolve().parents[1] / "llm" / "prompts" / "skill_editor_prompt.md"
+PROMPT_PATH = paths.resource_dir() / "app" / "llm" / "prompts" / "skill_editor_prompt.md"
 STREAM_INTERVAL_SECONDS = 0.035
 BASIC_FIELDS = {
     "name",

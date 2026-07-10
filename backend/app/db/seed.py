@@ -5,6 +5,7 @@ from pathlib import Path
 
 from sqlmodel import Session, select
 
+from app import paths
 from app.agents.branching import (
     copy_open_gallery_tools_to_agent,
     get_overall_agent,
@@ -629,7 +630,19 @@ PRODUCT_PRICE_QUERY_TOOL = {
     "enabled": True,
 }
 
-MOCK_MCP_STDIO_SERVER = Path(__file__).resolve().parents[2] / "mock_servers" / "mcp_stdio_server.py"
+MOCK_MCP_STDIO_SERVER = paths.resource_dir() / "mock_servers" / "mcp_stdio_server.py"
+
+
+def _stdio_mcp_python() -> str:
+    # 打包态 sys.executable 指向 ultrarag 引导器，需用附带 Python
+    if paths.is_frozen():
+        from app.general_skills.runtime_env import _bundled_python
+
+        bundled = _bundled_python()
+        if bundled.exists():
+            return str(bundled)
+    return sys.executable
+
 
 # --------------------------------------------------------------------------- #
 # MCP Servers（工具集）与其发现出的子工具
@@ -658,7 +671,7 @@ MCP_STDIO_DEMO_SERVER = {
     "transport": "stdio",
     "url": None,
     "headers_json": {},
-    "command": sys.executable,
+    "command": None,   # 由 _seed_mcp_servers 运行时惰性注入（见下）
     "args_json": [str(MOCK_MCP_STDIO_SERVER)],
     "env_json": {},
     "cwd": None,
@@ -732,6 +745,9 @@ DEFAULT_PERSONA_PROMPT = (
 def _seed_mcp_servers(session: Session) -> None:
     """落地 demo MCP server（工具集）及其已发现的子工具。"""
     for server_config in MCP_SERVERS:
+        server_config = dict(server_config)  # 避免修改模块级常量
+        if server_config.get("name") == "stdio_demo":
+            server_config["command"] = _stdio_mcp_python()
         server = session.exec(
             select(MCPServer).where(
                 MCPServer.tenant_id == "tenant_demo", MCPServer.name == server_config["name"]
@@ -799,6 +815,22 @@ def seed_demo_data(session: Session) -> None:
                 username="user_demo",
                 display_name="Demo User",
                 password_hash=hash_password("demo"),
+            )
+        )
+
+    # 管理员账号：_is_admin_user 认 "admin" 为管理员，能看到「模型配置」「账号管理」等系统入口。
+    # 桌面/单机版默认以此账号登录（admin / admin）。
+    admin_user = session.exec(
+        select(User).where(User.tenant_id == "tenant_demo", User.username == "admin")
+    ).first()
+    if not admin_user:
+        session.add(
+            User(
+                id="admin",
+                tenant_id="tenant_demo",
+                username="admin",
+                display_name="Administrator",
+                password_hash=hash_password("admin"),
             )
         )
 

@@ -1,3 +1,4 @@
+import os as _os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,8 +19,14 @@ class Settings(BaseSettings):
     general_skill_runtime_venv: str = ""
     general_skill_runtime_packages: str = "requests,httpx"
     general_skill_runtime_auto_install: bool = True
+    general_skill_pip_index_url: str = ""
+    general_skill_pip_timeout_seconds: int = 180
+    general_skill_network_install: bool = False
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=_os.environ.get("ULTRARAG_DOTENV", ".env"),
+        env_file_encoding="utf-8", extra="ignore",
+    )
 
     @property
     def cors_origin_list(self) -> list[str]:

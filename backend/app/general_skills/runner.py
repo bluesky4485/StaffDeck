@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import selectors
 import subprocess
+import sys
+import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -11,6 +14,7 @@ from tempfile import mkdtemp
 from types import SimpleNamespace
 from typing import Any
 
+from app import paths
 from app.db.models import GeneralSkill, ModelConfig
 from app.general_skills.schema import (
     GeneralSkillExecutionPlan,
@@ -23,7 +27,7 @@ from app.general_skills.runtime_env import GeneralSkillRuntimeError, ensure_runt
 from app.llm import LLMClient, LLMError
 
 
-PROMPT_DIR = Path(__file__).resolve().parents[1] / "llm" / "prompts"
+PROMPT_DIR = paths.resource_dir() / "app" / "llm" / "prompts"
 SELECTOR_PROMPT = PROMPT_DIR / "general_skill_selector_prompt.md"
 RUNNER_PROMPT = PROMPT_DIR / "general_skill_runner_prompt.md"
 REPAIR_PROMPT = PROMPT_DIR / "general_skill_repair_prompt.md"
@@ -478,6 +482,17 @@ class GeneralSkillRunner:
                 "SKILL_FILES_JSON": json.dumps([file["path"] for file in _skill_files(skill)], ensure_ascii=False),
             }
         )
+        if runtime == "bash" and not _bash_supported():
+            structured = {
+                "success": False,
+                "error": "bash_runtime_unsupported",
+                "message": "当前运行环境不支持 bash 技能（Windows 或打包版），请改用 Python 技能。",
+                "retryable": False,
+            }
+            _emit(trace, {"phase": "runtime_environment_failed",
+                          "message": "bash runtime 不受支持", "attempt": attempt,
+                          "runtime": runtime, "structured_result": structured}, event_sink)
+            return "", structured["message"], structured
         command = ["/bin/bash", str(runner_path)] if runtime == "bash" else [str(runtime_python), str(runner_path)]
         cwd = str(skill_dir if runtime == "bash" else run_dir)
         process = subprocess.Popen(
@@ -743,7 +758,7 @@ def _parse_stdout_json(stdout: str) -> dict[str, Any]:
         return {"success": True, "text": stripped}
 
 
-def _stream_process_output(
+def _stream_process_output_selectors(
     process: subprocess.Popen[bytes],
     trace: list[dict[str, Any]],
     event_sink: TraceSink | None,
@@ -801,6 +816,75 @@ def _stream_process_output(
     finally:
         selector.close()
     return "".join(stdout_parts), "".join(stderr_parts), timed_out
+
+
+def _use_thread_reader() -> bool:
+    return sys.platform == "win32"
+
+
+def _stream_process_output(process, trace, event_sink, attempt):
+    if _use_thread_reader():
+        return _stream_process_output_threaded(process, trace, event_sink, attempt)
+    return _stream_process_output_selectors(process, trace, event_sink, attempt)
+
+
+def _stream_process_output_threaded(process, trace, event_sink, attempt):
+    q: "queue.Queue[tuple[str, bytes]]" = queue.Queue()
+    stdout_parts: list[str] = []
+    stderr_parts: list[str] = []
+
+    def _reader(stream, name: str) -> None:
+        try:
+            for chunk in iter(lambda: stream.read(4096), b""):
+                q.put((name, chunk))
+        finally:
+            q.put((name, b""))  # EOF 标记
+
+    stream_map = [(process.stdout, "stdout"), (process.stderr, "stderr")]
+    threads: list[threading.Thread] = []
+    for stream, name in stream_map:
+        if stream is None:
+            continue
+        t = threading.Thread(target=_reader, args=(stream, name), daemon=True)
+        t.start()
+        threads.append(t)
+
+    open_streams = sum(1 for s, _ in stream_map if s is not None)
+    deadline = time.monotonic() + RUN_TIMEOUT_SECONDS
+    timed_out = False
+    eof_count = 0
+    while eof_count < open_streams:
+        if time.monotonic() > deadline:
+            timed_out = True
+            process.kill()
+            break
+        try:
+            name, chunk = q.get(timeout=0.1)
+        except queue.Empty:
+            continue
+        if chunk == b"":
+            eof_count += 1
+            continue
+        text = chunk.decode("utf-8", errors="replace")
+        if name == "stdout":
+            stdout_parts.append(text)
+            phase, message = "stdout_chunk", "收到运行输出"
+        else:
+            stderr_parts.append(text)
+            phase, message = "stderr_chunk", "收到错误输出"
+        _emit(trace, {"phase": phase, "message": message, "attempt": attempt, "text": text}, event_sink)
+
+    for t in threads:
+        t.join(timeout=1.0)
+    return "".join(stdout_parts), "".join(stderr_parts), timed_out
+
+
+def _bash_supported() -> bool:
+    if sys.platform == "win32":
+        return False
+    if paths.is_frozen():
+        return False
+    return Path("/bin/bash").exists()
 
 
 def _emit(trace: list[dict[str, Any]], item: dict[str, Any], event_sink: TraceSink | None = None) -> None:

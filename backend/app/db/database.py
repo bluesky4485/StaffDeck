@@ -22,8 +22,9 @@ def _normalize_database_url(url: str) -> str:
     if path.is_absolute():
         return url
 
-    backend_dir = Path(__file__).resolve().parents[2]
-    return f"sqlite:///{(backend_dir / path).resolve()}"
+    from app import paths
+    base_dir = paths.user_data_dir() if paths.is_frozen() else Path(__file__).resolve().parents[2]
+    return f"sqlite:///{(base_dir / path).resolve()}"
 
 
 settings = get_settings()

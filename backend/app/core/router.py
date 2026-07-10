@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, get_args
 
+from app import paths
 from app.db.models import ChatSession, ModelConfig, Skill
 from app.llm import LLMClient, LLMError
 from app.session.helpers import public_session
@@ -10,8 +11,8 @@ from app.session.session_schema import RouterDecision, RouterDecisionValue, Task
 from app.session.slot_policy import strip_router_generated_message_slots
 
 
-PROMPT_PATH = Path(__file__).resolve().parents[1] / "llm" / "prompts" / "router_prompt.md"
-TASK_SCHEDULER_PROMPT_PATH = Path(__file__).resolve().parents[1] / "llm" / "prompts" / "task_scheduler_prompt.md"
+PROMPT_PATH = paths.resource_dir() / "app" / "llm" / "prompts" / "router_prompt.md"
+TASK_SCHEDULER_PROMPT_PATH = paths.resource_dir() / "app" / "llm" / "prompts" / "task_scheduler_prompt.md"
 ALLOWED_DECISIONS = set(get_args(RouterDecisionValue))
 
 

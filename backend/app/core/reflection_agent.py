@@ -4,6 +4,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from app import paths
 from app.db.models import ChatSession, ModelConfig, Skill, Tool
 from app.llm import LLMClient, LLMError
 from app.session.helpers import public_session
@@ -11,7 +12,7 @@ from app.session.session_schema import RouterDecision, StepAgentResult
 from app.tools.tool_schema import ToolResult
 
 
-PROMPT_PATH = Path(__file__).resolve().parents[1] / "llm" / "prompts" / "reflection_prompt.md"
+PROMPT_PATH = paths.resource_dir() / "app" / "llm" / "prompts" / "reflection_prompt.md"
 
 
 class ReflectionDecision(BaseModel):

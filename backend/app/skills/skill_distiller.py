@@ -8,6 +8,7 @@ from time import sleep
 from typing import Any
 from urllib.parse import urlparse
 
+from app import paths
 from app.db.models import ModelConfig
 from app.llm import LLMClient, LLMError
 from app.skills.llm_limits import skill_model_config
@@ -16,7 +17,7 @@ from app.skills.skill_schema import SkillDistillRequest, SkillDistillResponse, S
 from app.skills.step_ids import ensure_unique_node_ids, skill_card_with_unique_step_ids
 
 
-PROMPT_PATH = Path(__file__).resolve().parents[1] / "llm" / "prompts" / "skill_distiller_prompt.md"
+PROMPT_PATH = paths.resource_dir() / "app" / "llm" / "prompts" / "skill_distiller_prompt.md"
 STREAM_INTERVAL_SECONDS = 0.035
 MODEL_REPAIR_ATTEMPTS = 2
 CLOSED_LOOP_RESPONSE_RULE = (

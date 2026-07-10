@@ -1,0 +1,94 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14        # Apple Silicon (arm64)
+            script: bash packaging/build_macos.sh
+          - os: macos-13        # Intel (x86_64) — 无本地机器，靠 CI 出包
+            script: bash packaging/build_macos.sh
+          - os: ubuntu-latest
+            script: bash packaging/build_linux.sh
+          - os: windows-latest
+            script: pwsh packaging/build_windows.ps1
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install frontend deps
+        run: npm --prefix frontend-enterprise ci || npm --prefix frontend-enterprise install
+
+      - name: macOS tools
+        if: startsWith(matrix.os, 'macos')
+        run: brew install create-dmg
+
+      - name: Linux tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev build-essential libfuse2
+          sudo gem install --no-document fpm
+          wget -O appimagetool https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+
+      - name: Windows tools
+        if: runner.os == 'Windows'
+        run: choco install innosetup -y
+
+      - name: Build
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: ${{ matrix.script }}
+
+      - name: Windows general-skill smoke (python runtime)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath "packaging/out/staffdeck/staffdeck.exe" -PassThru `
+            -Environment @{ ULTRARAG_PORT = "5178" }
+          Start-Sleep -Seconds 12
+          try {
+            $health = Invoke-RestMethod "http://127.0.0.1:5178/api/health"
+            if ($health.status -ne "ok") { throw "health 异常: $($health.status)" }
+            # 深层导入回归（401 需登录属正常，只要不是 5xx / 连接失败）
+            try { Invoke-RestMethod "http://127.0.0.1:5178/api/enterprise/agents" | Out-Null }
+            catch { if ($_.Exception.Response.StatusCode.value__ -ge 500) { throw "agents 5xx" } }
+            Write-Host "windows smoke ok"
+          } finally {
+            Stop-Process -Id $p.Id -Force
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: staffdeck-${{ matrix.os }}
+          path: packaging/out/URStaff-*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/URStaff-*

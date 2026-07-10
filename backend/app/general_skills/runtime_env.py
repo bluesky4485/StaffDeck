@@ -25,7 +25,7 @@ def ensure_runtime_python() -> Path:
     python_path = _resolve_runtime_python(settings.general_skill_runtime_python, settings.general_skill_runtime_venv)
     if not python_path.exists():
         _create_runtime_venv(python_path)
-    if settings.general_skill_runtime_auto_install:
+    if settings.general_skill_runtime_auto_install and settings.general_skill_network_install:
         _ensure_packages(python_path, settings.general_skill_runtime_package_list)
     return python_path
 
@@ -45,11 +45,22 @@ def _backend_dir() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _bundled_python() -> Path:
+    # 打包态：附带的 python-build-standalone 被拷到 PyInstaller onedir 根下的 runtime/
+    # 不用 resource_dir()==sys._MEIPASS（onedir 下指向 _internal/），runtime 在可执行文件同级。
+    # Windows 布局：python.exe 在 runtime 根，不在 Scripts/。
+    root = Path(sys.executable).resolve().parent / "runtime"
+    return (root / "python.exe") if sys.platform == "win32" else (root / "bin" / "python3")
+
+
 def _resolve_runtime_python(explicit_python: str, explicit_venv: str) -> Path:
     if explicit_python.strip():
         return Path(explicit_python).expanduser()
     if explicit_venv.strip():
         return _python_in_venv(Path(explicit_venv).expanduser())
+    from app import paths
+    if paths.is_frozen() and _bundled_python().exists():
+        return _bundled_python()
     backend_venv = _backend_dir() / ".venv"
     if _python_in_venv(backend_venv).exists():
         return _python_in_venv(backend_venv)
@@ -71,16 +82,28 @@ def _create_runtime_venv(python_path: Path) -> None:
 
 
 def _ensure_packages(python_path: Path, packages: list[str]) -> None:
+    settings = get_settings()
     missing = [package for package in packages if not _can_import(python_path, _import_name(package))]
     if not missing:
         return
+    args = [str(python_path), "-m", "pip", "install", *missing]
+    if settings.general_skill_pip_index_url.strip():
+        args += ["-i", settings.general_skill_pip_index_url.strip()]
+    env = os.environ.copy()
+    try:
+        import certifi
+        env["SSL_CERT_FILE"] = certifi.where()
+        env["PIP_CERT"] = certifi.where()
+    except Exception:
+        pass
     result = subprocess.run(
-        [str(python_path), "-m", "pip", "install", *missing],
+        args,
         cwd=str(_backend_dir()),
         text=True,
         capture_output=True,
-        timeout=180,
+        timeout=settings.general_skill_pip_timeout_seconds,
         check=False,
+        env=env,
     )
     if result.returncode != 0:
         raise GeneralSkillRuntimeError(
