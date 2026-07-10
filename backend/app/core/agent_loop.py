@@ -19,9 +19,9 @@ from app.core.cancellation import clear_chat_turn_cancelled, is_chat_turn_cancel
 from app.core.reflection_agent import ReflectionAgent, ReflectionDecision, action_needs_reflection
 from app.core.response_generator import (
     FALLBACK_REPLY,
-    MODEL_FAILURE_SUGGESTION,
     ResponseGenerator,
     format_runtime_failure_reply,
+    model_failure_suggestion,
 )
 from app.core.router import Router
 from app.core.skill_runtime import SkillRuntime
@@ -460,7 +460,7 @@ class AgentLoop:
                 "error_occurred",
                 {"code": "LLM_ERROR", "message": str(exc)},
             )
-            reply = format_runtime_failure_reply("模型调用失败", exc, "LLM_ERROR", MODEL_FAILURE_SUGGESTION)
+            reply = format_runtime_failure_reply("模型调用失败", exc, "LLM_ERROR", model_failure_suggestion(exc))
         except Exception as exc:
             chat_session = chat_session or self._get_or_create_session(request)
             self.events.record(
@@ -1920,7 +1920,7 @@ class AgentLoop:
             )
             return
         except LLMError as exc:
-            yield from stream_failure_response("模型调用失败", exc, "LLM_ERROR", MODEL_FAILURE_SUGGESTION)
+            yield from stream_failure_response("模型调用失败", exc, "LLM_ERROR", model_failure_suggestion(exc))
             return
         except Exception as exc:
             turn_finalized = False

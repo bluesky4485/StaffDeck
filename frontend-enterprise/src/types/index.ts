@@ -55,6 +55,7 @@ export type KnowledgeDocumentRead = {
   id: string;
   tenant_id: string;
   knowledge_base_id: string;
+  knowledge_base_version_id?: string;
   filename: string;
   file_type: string;
   title?: string;

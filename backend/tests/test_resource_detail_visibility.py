@@ -10,7 +10,7 @@ from app.agents.branching import (
     ensure_knowledge_base_version,
     ensure_private_resource_binding,
 )
-from app.api.knowledge import get_document, get_job, list_documents, list_jobs
+from app.api.knowledge import get_document, get_document_buckets, get_job, list_documents, list_jobs
 from app.api.knowledge_bases import get_knowledge_base, list_knowledge_base_versions
 from app.api.skills import get_skill, get_skill_version, list_skill_versions
 from app.db.models import (
@@ -119,6 +119,54 @@ def test_private_knowledge_details_documents_and_jobs_require_the_bound_agent_sc
         assert get_job(job.id, "tenant_demo", owner_agent.id, db).id == job.id
         assert [row.id for row in list_documents("tenant_demo", None, owner_agent.id, True, db)] == [document.id]
         assert [row.id for row in list_jobs("tenant_demo", owner_agent.id, None, 8, db)] == [job.id]
+
+
+def test_visible_knowledge_history_has_consistent_list_and_detail_access() -> None:
+    with _test_session() as db:
+        owner_agent, _ = _seed_private_scope(db)
+        knowledge_base = KnowledgeBase(
+            id="kb_versioned",
+            tenant_id="tenant_demo",
+            name="版本知识库",
+        )
+        db.add(knowledge_base)
+        db.flush()
+        branch = ensure_agent_private_knowledge_branch(db, "tenant_demo", owner_agent.id, knowledge_base)
+        db.flush()
+        historical_version = ensure_knowledge_base_version(db, knowledge_base, branch.head_version)
+        branch.base_version = branch.head_version
+        branch.head_version = f"{branch.head_version}.next"
+        db.add(branch)
+        current_version = ensure_knowledge_base_version(db, knowledge_base, branch.head_version)
+        historical_document = KnowledgeDocument(
+            id="kdoc_historical",
+            tenant_id="tenant_demo",
+            knowledge_base_id=knowledge_base.id,
+            knowledge_base_version_id=historical_version.id,
+            filename="historical.md",
+            file_type="md",
+            status="ready",
+        )
+        current_document = KnowledgeDocument(
+            id="kdoc_current",
+            tenant_id="tenant_demo",
+            knowledge_base_id=knowledge_base.id,
+            knowledge_base_version_id=current_version.id,
+            filename="current.md",
+            file_type="md",
+            status="ready",
+        )
+        db.add(historical_document)
+        db.add(current_document)
+        db.commit()
+
+        current_rows = list_documents("tenant_demo", knowledge_base.id, owner_agent.id, False, db)
+        history_rows = list_documents("tenant_demo", knowledge_base.id, owner_agent.id, True, db)
+
+        assert [row.id for row in current_rows] == [current_document.id]
+        assert {row.id for row in history_rows} == {historical_document.id, current_document.id}
+        assert get_document(historical_document.id, "tenant_demo", owner_agent.id, db).knowledge_base_version_id == historical_version.id
+        assert get_document_buckets(historical_document.id, "tenant_demo", owner_agent.id, db) == []
 
 
 def _seed_private_scope(db: Session) -> tuple[AgentProfile, AgentProfile]:

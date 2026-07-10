@@ -112,7 +112,7 @@ def test_model_failure_returns_explicit_reason(monkeypatch):
         model_config=None,  # type: ignore[arg-type]
     )
 
-    assert reply == "模型调用失败（LLM_ERROR）：upstream timeout。请检查模型配置、API Key、网络或模型服务状态后重试。"
+    assert reply == "模型调用失败（LLM_ERROR）：upstream timeout。模型服务调用已超时；请检查服务负载、网络延迟和超时配置后重试。"
 
 
 def test_pending_reply_without_tool_result_uses_model_reply(monkeypatch):
@@ -379,7 +379,7 @@ def test_stream_model_failure_returns_explicit_reason(monkeypatch):
         )
     )
 
-    assert "".join(chunks) == "模型调用失败（LLM_ERROR）：connection refused。请检查模型配置、API Key、网络或模型服务状态后重试。"
+    assert "".join(chunks) == "模型调用失败（LLM_ERROR）：connection refused。无法连接模型服务；请检查服务地址、网络连通性和模型服务进程状态。"
 
 
 def test_stream_pending_reply_without_tool_result_is_model_driven(monkeypatch):

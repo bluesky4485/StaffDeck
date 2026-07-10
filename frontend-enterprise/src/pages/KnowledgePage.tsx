@@ -382,7 +382,7 @@ export default function KnowledgeManagePage({ currentUser, onLogout }: Knowledge
     try {
       const suffix = scopedAgentId ? `&agent_id=${encodeURIComponent(scopedAgentId)}` : '';
       const [docRows, kbRows] = await Promise.all([
-        api.get<KnowledgeDocumentRead[]>(`/api/enterprise/knowledge/documents?tenant_id=${TENANT_ID}&include_all_versions=true${suffix}`),
+        api.get<KnowledgeDocumentRead[]>(`/api/enterprise/knowledge/documents?tenant_id=${TENANT_ID}${suffix}`),
         api.get<KnowledgeBaseRead[]>(`/api/enterprise/knowledge-bases?tenant_id=${TENANT_ID}${suffix}`),
       ]);
       setDocuments(docRows);
@@ -413,6 +413,7 @@ export default function KnowledgeManagePage({ currentUser, onLogout }: Knowledge
 
   async function loadBuckets(document: KnowledgeDocumentRead, select = true) {
     if (select) setSelectedDocument(document);
+    setBuckets([]);
     setSearchResult(null);
     try {
       const [rows] = await Promise.all([
@@ -423,6 +424,7 @@ export default function KnowledgeManagePage({ currentUser, onLogout }: Knowledge
       ]);
       setBuckets(rows);
     } catch (error) {
+      setBuckets([]);
       notify.error(error instanceof Error ? error.message : '加载内部索引失败');
     }
   }

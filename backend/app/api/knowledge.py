@@ -32,6 +32,7 @@ from app.db.models import (
     KnowledgeDocument,
     KnowledgeIngestJob,
     KnowledgeBase,
+    KnowledgeBaseVersion,
     ModelConfig,
     User,
     utc_now,
@@ -719,6 +720,7 @@ def document_read(row: KnowledgeDocument) -> KnowledgeDocumentRead:
         id=row.id,
         tenant_id=row.tenant_id,
         knowledge_base_id=row.knowledge_base_id,
+        knowledge_base_version_id=row.knowledge_base_version_id,
         filename=row.filename,
         file_type=row.file_type,
         title=row.title,
@@ -916,10 +918,29 @@ def _ensure_knowledge_version_visible(
     knowledge_base_version_id: str | None,
     agent_id: str | None,
 ) -> None:
-    if not knowledge_base_version_id or knowledge_base_version_id not in set(
-        visible_knowledge_base_version_ids(db, tenant_id, agent_id, include_inactive=True)
-    ):
-        raise HTTPException(status_code=404, detail="Knowledge resource not found")
+    if not knowledge_base_version_id:
+        raise HTTPException(
+            status_code=404,
+            detail="Knowledge resource has no version binding; re-ingest the document or restore its knowledge-base version",
+        )
+    version = db.get(KnowledgeBaseVersion, knowledge_base_version_id)
+    if not version or version.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Knowledge-base version {knowledge_base_version_id} does not exist in tenant {tenant_id}",
+        )
+    visible_base_ids = set(
+        visible_knowledge_base_versions(db, tenant_id, agent_id, include_inactive=True)
+    )
+    if version.knowledge_base_id not in visible_base_ids:
+        scope = agent_id or "open-gallery"
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Knowledge-base version {knowledge_base_version_id} belongs to resource "
+                f"{version.knowledge_base_id}, which is not visible in scope {scope}"
+            ),
+        )
 
 
 def _get_discovery(db: Session, tenant_id: str, suggestion_id: str) -> KnowledgeDiscoverySuggestion:

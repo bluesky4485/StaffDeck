@@ -6,6 +6,7 @@ import copy
 import json
 import re
 from typing import Any
+from urllib.parse import urlsplit
 
 from openai import OpenAI
 
@@ -52,9 +53,10 @@ class LLMClient:
         if not api_key:
             raise LLMError("Model API key is not configured")
         self.timeout_seconds = get_settings().model_api_timeout_seconds or DEFAULT_MODEL_API_TIMEOUT_SECONDS
+        self.base_url = str(model_config.base_url or "")
         self.client = OpenAI(
             api_key=api_key,
-            base_url=model_config.base_url,
+            base_url=self.base_url,
             timeout=self.timeout_seconds,
         )
         self.model = model_config.model
@@ -84,6 +86,7 @@ class LLMClient:
             }
             if response_format:
                 request["response_format"] = response_format
+            empty_diagnostics: list[str] = []
             for attempt in range(EMPTY_RESPONSE_RETRIES + 1):
                 completion = self.client.chat.completions.create(
                     **request,
@@ -91,14 +94,13 @@ class LLMClient:
                 content = _completion_message_content(completion)
                 if content.strip():
                     return content
+                empty_diagnostics.append(_completion_empty_diagnostic(completion, attempt + 1))
                 if attempt >= EMPTY_RESPONSE_RETRIES:
-                    raise LLMError(
-                        f"{EMPTY_RESPONSE_MESSAGE} after {EMPTY_RESPONSE_RETRIES + 1} attempts"
-                    )
+                    raise LLMError(_empty_response_detail(self, empty_diagnostics))
         except Exception as exc:
             if isinstance(exc, LLMError):
                 raise
-            raise LLMError(str(exc)) from exc
+            raise LLMError(_provider_failure_detail(self, exc)) from exc
 
     def generate_text_stream(self, system_prompt: str, user_payload: dict[str, Any]) -> Iterator[str]:
         context_messages, serialized_payload = _project_context_messages(user_payload)
@@ -106,26 +108,70 @@ class LLMClient:
             raise LLMError(MULTIMODAL_UNSUPPORTED_MESSAGE)
         serialized = json.dumps(serialized_payload, ensure_ascii=False)
         try:
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    *context_messages,
-                    {"role": "user", "content": serialized},
-                ],
-                temperature=self.temperature,
-                max_tokens=self.max_output_tokens,
-                stream=True,
-            )
-            for chunk in stream:
-                if not chunk.choices:
-                    continue
-                delta = chunk.choices[0].delta
-                content = getattr(delta, "content", None)
-                if content:
-                    yield content
+            empty_diagnostics: list[str] = []
+            for attempt in range(EMPTY_RESPONSE_RETRIES + 1):
+                stream = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        *context_messages,
+                        {"role": "user", "content": serialized},
+                    ],
+                    temperature=self.temperature,
+                    max_tokens=self.max_output_tokens,
+                    stream=True,
+                )
+                pending_parts: list[str] = []
+                emitted_text = False
+                chunk_count = 0
+                choice_chunk_count = 0
+                reasoning_chars = 0
+                finish_reasons: set[str] = set()
+                response_ids: set[str] = set()
+                for chunk in stream:
+                    chunk_count += 1
+                    response_id = _safe_fragment(getattr(chunk, "id", None), 48)
+                    if response_id:
+                        response_ids.add(response_id)
+                    choices = getattr(chunk, "choices", None) or []
+                    if not choices:
+                        continue
+                    choice_chunk_count += len(choices)
+                    choice = choices[0]
+                    finish_reason = _safe_fragment(getattr(choice, "finish_reason", None), 32)
+                    if finish_reason:
+                        finish_reasons.add(finish_reason)
+                    delta = getattr(choice, "delta", None)
+                    reasoning_chars += len(_reasoning_text(delta))
+                    content = _content_text(getattr(delta, "content", None))
+                    if not content:
+                        continue
+                    if emitted_text:
+                        yield content
+                        continue
+                    pending_parts.append(content)
+                    buffered = "".join(pending_parts)
+                    if buffered.strip():
+                        emitted_text = True
+                        pending_parts.clear()
+                        yield buffered
+                if emitted_text:
+                    return
+                empty_diagnostics.append(
+                    _stream_empty_diagnostic(
+                        attempt + 1,
+                        chunk_count,
+                        choice_chunk_count,
+                        reasoning_chars,
+                        finish_reasons,
+                        response_ids,
+                    )
+                )
+            raise LLMError(_empty_response_detail(self, empty_diagnostics))
         except Exception as exc:
-            raise LLMError(str(exc)) from exc
+            if isinstance(exc, LLMError):
+                raise
+            raise LLMError(_provider_failure_detail(self, exc)) from exc
 
     def generate_json(self, system_prompt: str, user_payload: dict[str, Any]) -> dict[str, Any]:
         outputs: list[str] = []
@@ -192,17 +238,168 @@ def _completion_message_content(completion: Any) -> str:
         content = getattr(message, "content", None)
     except (IndexError, TypeError, AttributeError):
         return ""
+    return _content_text(content)
+
+
+def _content_text(content: Any) -> str:
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-            elif isinstance(item, dict) and isinstance(item.get("text"), str):
-                parts.append(item["text"])
-        return "".join(parts)
+        return "".join(_content_part_text(item) for item in content)
+    return _content_part_text(content)
+
+
+def _content_part_text(item: Any) -> str:
+    if isinstance(item, str):
+        return item
+    text: Any = item.get("text") if isinstance(item, dict) else getattr(item, "text", None)
+    if isinstance(text, str):
+        return text
+    if isinstance(text, dict) and isinstance(text.get("value"), str):
+        return text["value"]
+    value = getattr(text, "value", None)
+    return value if isinstance(value, str) else ""
+
+
+def _completion_empty_diagnostic(completion: Any, attempt: int) -> str:
+    choices = getattr(completion, "choices", None) or []
+    response_id = _safe_fragment(getattr(completion, "id", None), 48) or "missing"
+    if not choices:
+        return f"attempt_{attempt}: response_id={response_id}, choices=0"
+    choice = choices[0]
+    message = getattr(choice, "message", None)
+    finish_reason = _safe_fragment(getattr(choice, "finish_reason", None), 32) or "missing"
+    refusal = _safe_fragment(getattr(message, "refusal", None), 80)
+    reasoning_chars = len(_reasoning_text(message))
+    tool_calls = getattr(message, "tool_calls", None) or []
+    content = getattr(message, "content", None)
+    content_shape = _content_shape(content)
+    usage = getattr(completion, "usage", None)
+    completion_tokens = getattr(usage, "completion_tokens", None)
+    parts = [
+        f"attempt_{attempt}: response_id={response_id}",
+        f"choices={len(choices)}",
+        f"finish_reason={finish_reason}",
+        f"content={content_shape}",
+        f"reasoning_chars={reasoning_chars}",
+        f"tool_calls={len(tool_calls)}",
+    ]
+    if refusal:
+        parts.append(f"refusal={refusal}")
+    if completion_tokens is not None:
+        parts.append(f"completion_tokens={completion_tokens}")
+    return ", ".join(parts)
+
+
+def _stream_empty_diagnostic(
+    attempt: int,
+    chunk_count: int,
+    choice_chunk_count: int,
+    reasoning_chars: int,
+    finish_reasons: set[str],
+    response_ids: set[str],
+) -> str:
+    return (
+        f"attempt_{attempt}: stream_chunks={chunk_count}, choice_chunks={choice_chunk_count}, "
+        f"finish_reason={','.join(sorted(finish_reasons)) or 'missing'}, text_chars=0, "
+        f"reasoning_chars={reasoning_chars}, response_id={','.join(sorted(response_ids)) or 'missing'}"
+    )
+
+
+def _empty_response_detail(client: Any, diagnostics: list[str]) -> str:
+    attempts = EMPTY_RESPONSE_RETRIES + 1
+    model = _safe_fragment(getattr(client, "model", None), 80) or "unknown"
+    endpoint = _endpoint_label(getattr(client, "base_url", None))
+    response_details = " | ".join(diagnostics)
+    return (
+        f"{EMPTY_RESPONSE_MESSAGE} after {attempts} attempts; provider returned no usable message.content; "
+        f"model={model}; endpoint={endpoint}; {response_details}"
+    )
+
+
+def _provider_failure_detail(client: Any, exc: Exception) -> str:
+    model = _safe_fragment(getattr(client, "model", None), 80) or "unknown"
+    endpoint = _endpoint_label(getattr(client, "base_url", None))
+    timeout = getattr(client, "timeout_seconds", None)
+    status_code = getattr(exc, "status_code", None)
+    request_id = _safe_fragment(getattr(exc, "request_id", None), 64)
+    error_type = type(exc).__name__
+    message = _safe_fragment(exc, 240) or "no provider error message"
+    provider_code = ""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error_body = body.get("error") if isinstance(body.get("error"), dict) else body
+        provider_code = _safe_fragment(error_body.get("code") or error_body.get("type"), 64)
+        provider_message = _safe_fragment(error_body.get("message"), 160)
+        if provider_message and provider_message not in message:
+            message = f"{message}; provider_message={provider_message}"
+    details = [
+        f"LLM provider request failed ({error_type})",
+        f"message={message}",
+        f"model={model}",
+        f"endpoint={endpoint}",
+    ]
+    if status_code is not None:
+        details.append(f"status_code={status_code}")
+    if provider_code:
+        details.append(f"provider_code={provider_code}")
+    if request_id:
+        details.append(f"request_id={request_id}")
+    if timeout is not None:
+        details.append(f"timeout_seconds={timeout}")
+    return "; ".join(details)
+
+
+def _content_shape(content: Any) -> str:
+    if content is None:
+        return "null"
+    text = _content_text(content)
+    if isinstance(content, str):
+        return f"string({len(content)} chars{' whitespace' if content and not content.strip() else ''})"
+    if isinstance(content, list):
+        return f"list({len(content)} parts, {len(text)} text_chars)"
+    return f"{type(content).__name__}({len(text)} text_chars)"
+
+
+def _reasoning_text(value: Any) -> str:
+    if value is None:
+        return ""
+    for key in ("reasoning_content", "reasoning", "thinking"):
+        content = value.get(key) if isinstance(value, dict) else getattr(value, key, None)
+        text = _content_text(content)
+        if text:
+            return text
     return ""
+
+
+def _safe_fragment(value: Any, limit: int) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    text = re.sub(r"\bsk-[A-Za-z0-9_-]{8,}\b", "sk-***", text)
+    text = re.sub(r"\bpt-[A-Za-z0-9_-]{8,}\b", "pt-***", text)
+    text = re.sub(
+        r"(?i)(api[_-]?key|authorization|access[_-]?token|token)=([^&\s;]+)",
+        r"\1=***",
+        text,
+    )
+    return text[:limit]
+
+
+def _endpoint_label(value: Any) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return "unknown"
+    parsed = urlsplit(raw)
+    if not parsed.hostname:
+        return "configured-endpoint"
+    host = parsed.hostname
+    try:
+        port = parsed.port
+    except ValueError:
+        return "configured-endpoint"
+    if port:
+        host = f"{host}:{port}"
+    path = parsed.path.rstrip("/")
+    return _safe_fragment(f"{parsed.scheme or 'http'}://{host}{path}", 160)
 
 
 def _extract_json(text: str) -> str:

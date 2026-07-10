@@ -78,6 +78,7 @@ class KnowledgeDocumentRead(BaseModel):
     id: str
     tenant_id: str
     knowledge_base_id: str
+    knowledge_base_version_id: Optional[str] = None
     filename: str
     file_type: str
     title: Optional[str] = None

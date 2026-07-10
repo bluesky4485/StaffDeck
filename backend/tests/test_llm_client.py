@@ -115,6 +115,89 @@ def test_generate_text_retries_empty_response():
     assert len(client.client.chat.completions.calls) == 3
 
 
+def test_generate_text_empty_response_reports_provider_diagnostics():
+    client = object.__new__(LLMClient)
+    client.client = _FakeOpenAIClient()
+    client.model = "demo-model"
+    client.base_url = "https://user:secret@example.test/v1?token=hidden"
+    client.timeout_seconds = 600.0
+    client.temperature = 0.2
+    client.max_output_tokens = 256
+
+    def fake_create(**kwargs):  # noqa: ANN003
+        client.client.chat.completions.calls.append(kwargs)
+        message = type(
+            "Message",
+            (),
+            {
+                "content": None,
+                "reasoning_content": "provider-side reasoning",
+                "refusal": None,
+                "tool_calls": [],
+            },
+        )()
+        choice = type("Choice", (), {"message": message, "finish_reason": "length"})()
+        usage = type("Usage", (), {"completion_tokens": 256})()
+        return type("Completion", (), {"id": "resp_demo", "choices": [choice], "usage": usage})()
+
+    client.client.chat.completions.create = fake_create
+
+    with pytest.raises(LLMError) as error:
+        client.generate_text("system prompt", {"hello": "world"})
+
+    detail = str(error.value)
+    assert "Model returned an empty response after 3 attempts" in detail
+    assert "provider returned no usable message.content" in detail
+    assert "model=demo-model" in detail
+    assert "endpoint=https://example.test/v1" in detail
+    assert "finish_reason=length" in detail
+    assert "reasoning_chars=23" in detail
+    assert "completion_tokens=256" in detail
+    assert "secret" not in detail
+    assert "hidden" not in detail
+
+
+def test_generate_text_reads_text_from_structured_content_parts():
+    client = object.__new__(LLMClient)
+    client.client = _FakeOpenAIClient()
+    client.model = "demo-model"
+    client.temperature = 0.2
+    client.max_output_tokens = 256
+    part = type("ContentPart", (), {"text": "structured answer"})()
+
+    client.client.chat.completions.create = lambda **_kwargs: _completion_with_content([part])
+
+    assert client.generate_text("system prompt", {"hello": "world"}) == "structured answer"
+
+
+def test_generate_text_stream_reports_empty_stream_diagnostics():
+    client = object.__new__(LLMClient)
+    client.client = _FakeOpenAIClient()
+    client.model = "demo-model"
+    client.base_url = "https://example.test/v1"
+    client.timeout_seconds = 600.0
+    client.temperature = 0.2
+    client.max_output_tokens = 256
+
+    def fake_create(**kwargs):  # noqa: ANN003
+        client.client.chat.completions.calls.append(kwargs)
+        delta = type("Delta", (), {"content": None, "reasoning_content": "reasoning only"})()
+        choice = type("Choice", (), {"delta": delta, "finish_reason": "stop"})()
+        chunk = type("Chunk", (), {"id": "chunk_demo", "choices": [choice]})()
+        return iter([chunk])
+
+    client.client.chat.completions.create = fake_create
+
+    with pytest.raises(LLMError) as error:
+        list(client.generate_text_stream("system prompt", {"hello": "world"}))
+
+    detail = str(error.value)
+    assert "stream_chunks=1" in detail
+    assert "finish_reason=stop" in detail
+    assert "reasoning_chars=14" in detail
+    assert len(client.client.chat.completions.calls) == 3
+
+
 def test_generate_text_projects_conversation_context_messages():
     client = object.__new__(LLMClient)
     client.client = _FakeOpenAIClient()
